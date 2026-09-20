@@ -1,0 +1,58 @@
+# Recommendation engine. Every default here is derived in
+# research/threshold_study.py; none is picked by feel.
+
+recommendations:
+  min_count: 7
+  max_count: 20
+
+  # --- eligibility gates (hard pass/fail) ---
+  eligibility:
+    # Probability floors live in markets.yaml, per market, computed from each
+    # market's measured base rate. There is deliberately no single global floor.
+    min_data_completeness: 0.85
+    max_feature_staleness_hours: 96     # football-data.co.uk lags up to ~3 days
+    min_team_history_matches: 5         # newly promoted sides in August
+    min_settled_predictions: 500        # per (market, competition)
+    max_market_ece: 0.05
+    min_lead_time_hours: 0.25
+    require_confirmed_kickoff: true
+    require_no_blocking_quality_issue: true
+
+  # --- reliability scoring ---
+  # Rank by a pessimistic estimate of the realised hit rate, not by raw
+  # probability: the 10th percentile of a Beta posterior over (market,
+  # competition, probability bucket) history. Thin cells are shrunk toward the
+  # market-level rate, so small samples and miscalibration both lower the score
+  # without any hand-tuned weighting.
+  reliability:
+    posterior_quantile: 0.10
+    prior_pseudo_observations: 50
+    probability_bucket_width: 0.05
+    freshness_factor_floor: 0.80
+    completeness_factor_floor: 0.80
+
+  confidence_bands:
+    HIGH:   {min_posterior: 0.75, min_samples: 1000}
+    MEDIUM: {min_posterior: 0.65, min_samples: 500}
+    LOW:    {recommendable: false}
+
+  # --- diversity and correlation ---
+  # Measured cost of these caps: send-eligible windows fall from ~61% to ~53%,
+  # and 8.45% of otherwise-viable windows are starved below 7. That is accepted.
+  # Without caps the batch is 81% double chance -- technically the highest
+  # probabilities available, but one model's error would sink the whole batch.
+  diversity:
+    max_selections_per_fixture: 1
+    max_within_fixture_correlation: 0.30   # computed exactly from the goal matrix
+    family_share_caps:
+      DOUBLE_CHANCE: 0.30
+      TOTALS: 0.40
+      RESULT: 0.40
+      BTTS: 0.30
+      CORNERS: 0.25
+      CARDS: 0.25
+    max_share_per_competition: 0.50
+    # Caps are computed against the ACTUAL batch size, not max_count, then
+    # relaxed by one slot if they would starve a viable batch below min_count.
+    relax_caps_before_skipping: true
+    min_family_allowance: 2

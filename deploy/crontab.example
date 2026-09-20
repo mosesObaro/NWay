@@ -1,0 +1,5 @@
+# Alternative to launchd, for Linux or if you prefer cron.
+# The tick is idempotent, so overlapping runs are safe: a second one exits
+# quietly on the lock file.
+
+*/30 * * * * cd /Users/obaromoses/Documents/NWay && .venv/bin/nway tick >> data/tick.log 2>&1

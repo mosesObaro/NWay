@@ -1,0 +1,8 @@
+# Runtime. numpy/scipy are used for the goal model and statistics; everything
+# else is standard library on purpose (sqlite3, urllib, email, zoneinfo).
+numpy>=1.26
+scipy>=1.11
+PyYAML>=6.0
+
+# Development
+pytest>=7.4

@@ -1,0 +1,123 @@
+
+=== Q1  Detailed-stat coverage by league and season ===
+    Y = column present and populated; . = absent/empty
+
+    league            9394  9596  0001  0506  1011  1516  1617  1718  1819  1920  2021  2122  2223  2324  2425  2526
+    Premier League       .     .     Y     Y     Y     Y     -     Y     Y     Y     Y     Y     Y     Y     Y     Y
+    La Liga              -     -     .     Y     Y     Y     -     Y     Y     Y     Y     Y     Y     Y     Y     Y
+    Bundesliga           .     .     Y     Y     Y     Y     -     Y     Y     Y     Y     Y     Y     Y     Y     Y
+    Serie A              -     -     .     Y     Y     Y     -     Y     Y     Y     Y     Y     Y     Y     Y     Y
+    Ligue 1              -     -     .     .     Y     Y     -     Y     Y     Y     Y     Y     Y     Y     Y     Y
+    Eredivisie           -     -     .     .     .     .     .     Y     Y     Y     Y     Y     Y     Y     Y     Y
+    Primeira Liga        -     -     .     .     .     .     .     Y     Y     Y     Y     Y     Y     Y     Y     Y
+
+    -> corners/cards models are only trainable from the first 'Y'.
+
+Loaded 21545 completed matches (1718-2526, 7 leagues)
+
+=== Q2  Base rates per league (these ARE the naive baseline) ===
+
+    league                  N       H%       D%       A%     AvgG     O1.5     O2.5     O3.5     BTTS  Corners    Cards
+    Premier League       3420    44.12    23.36    32.51     2.84    78.45    54.42    31.84    52.98    10.35     3.61
+    La Liga              3420    45.26    26.52    28.22     2.58    72.54    47.11    25.06    51.02     9.43     5.08
+    Bundesliga           2754    43.68    24.91    31.41     3.12    83.19    60.35    39.18    59.22     9.72     3.92
+    Serie A              3420    41.23    26.02    32.75     2.72    76.05    51.99    28.54    53.51     9.79     4.57
+    Ligue 1              3097    43.33    25.28    31.39     2.74    75.78    52.18    29.87    53.18     9.56     4.01
+    Eredivisie           2680    45.26    23.51    31.23     3.11    82.46    60.11    38.13    56.68    10.27     3.18
+    Primeira Liga        2754    44.15    23.89    31.95     2.62    72.51    49.16    27.09    48.51    10.05     5.39
+    ALL                 21545    43.82    24.85    31.33     2.81    77.09    53.34    31.07    53.47     9.87     4.27
+
+=== Q3  Rolling 72h fixture density (2425) ===
+
+    2364 matches, 2024-08-09 -> 2025-05-25, 1160 windows
+    median=21  mean=24.4  max=65  min=0
+
+    windows with >=  1 matches:  84.3%
+    windows with >=  3 matches:  79.4%
+    windows with >=  5 matches:  73.1%
+    windows with >=  7 matches:  68.0%
+    windows with >= 10 matches:  61.2%
+    windows with >= 15 matches:  55.5%
+    windows with >= 20 matches:  51.1%
+    windows with >= 30 matches:  40.6%
+
+    windows with ZERO matches: 182 (15.7%)  <- no-match suppression must handle these
+    longest empty stretches:
+      2024-09-02 -> 2024-09-10  (8 days)
+      2024-10-07 -> 2024-10-15  (8 days)
+      2024-11-11 -> 2024-11-19  (8 days)
+      2025-03-17 -> 2025-03-24  (7 days)
+      2024-08-20 -> 2024-08-20  (0 days)
+    matches by weekday: {'Sat': 974, 'Sun': 912, 'Fri': 204, 'Mon': 115, 'Wed': 73, 'Tue': 44, 'Thu': 42}
+
+=== Q4  Supply of high-probability opportunities ===
+    (market-implied, de-vigged; an UPPER BOUND on a home-grown model)
+
+    thresh        1X2 any        O2.5        U2.5       O1.5*     >=1 mkt   exp in 21
+    60%            29.7%       23.9%        9.4%       98.4%      100.0%        21.0
+    65%            21.6%       12.8%        2.9%       92.9%       95.8%        20.1
+    70%            14.0%        6.1%        0.8%       79.6%       80.4%        16.9
+    72%            11.8%        3.5%        0.2%       72.3%       72.5%        15.2
+    75%             8.7%        1.7%        0.0%       56.7%       56.8%        11.9
+    80%             4.3%        0.4%        0.0%       30.3%       30.4%         6.4
+    85%             1.3%        0.0%        0.0%       11.7%       11.7%         2.5
+    90%             0.1%        0.0%        0.0%        2.1%        2.1%         0.4
+
+    * O1.5 derived by inverting the O2.5 line to a Poisson goal rate.
+    -> a flat 80% floor yields ~6 matches in a median window: BELOW the
+       minimum of 7. A ~72-75% floor plus per-market caps is the
+       defensible choice. See docs/NOTIFICATION_ARCHITECTURE.md.
+
+=== Q4b  Benchmark scores for 1X2 (targets for MODEL acceptance) ===
+
+    model                      LogLoss  Brier(multi)
+    uniform (1/3 each)          1.0986        0.6667
+    pooled base rate            1.0711        0.6481
+    market (de-vigged)          0.9563        0.5670
+
+    n = 21544 matches. The model must beat 'pooled base rate';
+    'market' is the practical ceiling, not a realistic target.
+
+    Calibration of the de-vigged market on Over 2.5 (method demo):
+    bucket            n  predicted   actual      gap
+    0.2-0.3         135      0.287    0.296   +0.009
+    0.3-0.4        1429      0.369    0.376   +0.007
+    0.4-0.5        4826      0.451    0.438   -0.013
+    0.5-0.6        6297      0.544    0.559   +0.015
+    0.6-0.7        2956      0.636    0.651   +0.015
+    0.7-0.8         963      0.733    0.740   +0.007
+    0.8-0.9          59      0.824    0.864   +0.040
+    Expected Calibration Error (10 bins): 0.0132
+
+=== Q5  Which distribution? (var/mean = 1.00 => Poisson-consistent) ===
+
+    total goals              n= 21545  mean=  2.81  var=  2.81  var/mean= 1.00   Poisson OK
+    home goals               n= 21545  mean=  1.55  var=  1.73  var/mean= 1.12   Poisson OK
+    away goals               n= 21545  mean=  1.26  var=  1.40  var/mean= 1.11   Poisson OK
+    total corners            n= 21544  mean=  9.87  var= 11.65  var/mean= 1.18   overdispersed -> negative binomial
+    home corners             n= 21544  mean=  5.42  var=  8.94  var/mean= 1.65   overdispersed -> negative binomial
+    total cards              n= 21544  mean=  4.27  var=  5.71  var/mean= 1.34   overdispersed -> negative binomial
+
+    half-time coverage: 21544/21545 (100.0%)
+    mean 1st-half goals 1.244 | 2nd-half 1.563 (2H/1H = 1.256)
+    -> half markets need half-specific rates, NOT lambda/2.
+
+    League card rates (why a single card intercept cannot work):
+      Premier League   mean cards 3.61   referee known for 100.0% of matches
+      La Liga          mean cards 5.08   referee known for   0.0% of matches
+      Bundesliga       mean cards 3.92   referee known for   0.0% of matches
+      Serie A          mean cards 4.57   referee known for   0.0% of matches
+      Ligue 1          mean cards 4.01   referee known for   0.0% of matches
+      Eredivisie       mean cards 3.18   referee known for   0.0% of matches
+      Primeira Liga    mean cards 5.39   referee known for   0.0% of matches
+
+    Home advantage by season (drift evidence):
+      1718: n= 2438  home-win  46.1%  mean(HG-AG) +0.356
+      1819: n= 2438  home-win  45.7%  mean(HG-AG) +0.366
+      1920: n= 2263  home-win  44.5%  mean(HG-AG) +0.322
+      2021: n= 2438  home-win  40.2%  mean(HG-AG) +0.155  <- COVID, empty stadiums
+      2122: n= 2438  home-win  42.4%  mean(HG-AG) +0.276
+      2223: n= 2438  home-win  46.0%  mean(HG-AG) +0.355
+      2324: n= 2364  home-win  43.1%  mean(HG-AG) +0.299
+      2425: n= 2364  home-win  42.6%  mean(HG-AG) +0.210
+      2526: n= 2364  home-win  43.7%  mean(HG-AG) +0.323

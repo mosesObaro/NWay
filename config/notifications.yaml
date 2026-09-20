@@ -1,0 +1,43 @@
+notifications:
+  enabled: true
+
+  # Batch size bounds. Hard, non-negotiable, property-tested.
+  min_recommendations: 7
+  max_recommendations: 20
+
+  # Rolling window. Measured: a 72h window across the seven leagues held a
+  # median of 21 matches in 2024/25 and was completely empty 15.7% of the time.
+  prediction_horizon_hours: 72
+
+  # Send timing, anchored on the EARLIEST kickoff in the batch.
+  target_lead_time_hours: 0.5
+  min_lead_time_hours: 0.25
+  send_window_grace_minutes: 10       # the tick interval cannot hit an instant
+
+  # Cadence.
+  scheduler_interval_minutes: 30
+  cooldown_hours: 12
+  max_batches_per_day: 2
+  max_prediction_age_hours: 12        # older than this -> refresh before sending
+
+  # Duplicate suppression.
+  material_change_threshold: 0.10     # probability move that justifies a re-send
+  min_resend_gap_hours: 6
+  min_new_fixtures: 3                 # batch-level novelty
+  min_new_fixture_share: 0.30
+
+  # Presentation. Storage is always UTC; this affects rendering only.
+  user_timezone: Africa/Lagos
+  subject_template: "Football Predictions — Next {horizon_hours} Hours ({count} selections)"
+  include_uncertainty_notice: true    # non-negotiable; see docs/RISK_AND_LIMITATIONS.md
+
+  email:
+    provider: resend                  # resend | smtp | console | file
+    from_address: ${NWAY_EMAIL_FROM}
+    to_address: ${NWAY_EMAIL_TO}
+    reply_to: ${NWAY_EMAIL_REPLY_TO}
+    max_attempts: 3
+    backoff_seconds: [30, 120, 600]
+    timeout_seconds: 30
+    html: true
+    plain_text_fallback: true         # generated from data, never by stripping HTML

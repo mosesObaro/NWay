@@ -1,0 +1,73 @@
+# Data sources. Verified 2026-09-20; see docs/DATA_SOURCES.md.
+
+http:
+  user_agent: "NWay-FootballPredictor/0.1 (school project; ${NWAY_CONTACT_EMAIL})"
+  timeout_seconds: 30
+  max_retries: 4
+  backoff_base_seconds: 2
+  backoff_jitter: true
+  cache_dir: data/raw/http_cache
+  use_conditional_requests: true      # ETag / If-Modified-Since
+
+sources:
+  football_data_org:
+    enabled: true
+    role: PRIMARY_FIXTURES            # fixtures, UTC kickoffs, results, standings
+    base_url: https://api.football-data.org/v4
+    auth: {type: header, header: X-Auth-Token, env: NWAY_FOOTBALL_DATA_ORG_TOKEN}
+    rate_limit: {requests: 10, per_seconds: 60}   # free tier, verified
+    quota_headers: [X-Requests-Available, X-RequestCounter-Reset]
+    poll_interval_minutes: 30
+    discovery_horizon_days: 30
+    notes: >-
+      Free tier (TIER_ONE) covers all seven domestic leagues plus the Champions
+      League. Europa League is TIER_TWO and Conference League TIER_FOUR: both
+      paid. Match statistics are not on the free tier.
+
+  football_data_couk:
+    enabled: true
+    role: HISTORICAL_STATS            # shots, SoT, corners, fouls, cards, HT
+    base_url: https://football-data.co.uk/mmz4281   # apex domain: www redirects 302
+    auth: {type: none}
+    rate_limit: {requests: 1, per_seconds: 5}
+    poll_interval_hours: 12           # the site itself updates ~twice weekly
+    encoding: latin-1                 # NOT utf-8
+    strip_bom: true                   # first header cell is "﻿Div"
+    date_formats: ["%d/%m/%Y", "%d/%m/%y"]
+    time_is_local: true               # never use these times for scheduling
+    assumed_publication_lag_hours: 72 # used to set knowledge_time in backtests
+    notes: >-
+      robots.txt permits crawling. Free for personal/academic use; do not
+      redistribute the raw files.
+
+  openfootball:
+    enabled: true
+    role: CROSS_CHECK                 # public domain; lags several days
+    base_url: https://raw.githubusercontent.com/openfootball/football.json/master
+    auth: {type: none}
+    rate_limit: {requests: 1, per_seconds: 2}
+    poll_interval_hours: 24
+    notes: >-
+      Verified 2026-09-20: covers exactly the seven domestic leagues for
+      2026-27, but the most recent played match was 6 days old. The separate
+      champions-league repository is stale (no 2026-27 directory).
+
+  open_meteo:
+    enabled: false                    # Phase 12+; needs curated venue coordinates
+    role: MATCH_CONTEXT
+    base_url: https://api.open-meteo.com/v1
+    archive_url: https://historical-forecast-api.open-meteo.com/v1
+    auth: {type: none}
+    rate_limit: {requests: 1, per_seconds: 2}
+    live_endpoint: forecast           # what was KNOWABLE at prediction time
+    backtest_endpoint: historical-forecast
+    banned_endpoint: archive          # ERA5 reanalysis = actual weather = leakage
+    variables: [temperature_2m, precipitation, wind_speed_10m, wind_gusts_10m, cloud_cover]
+
+  api_football:
+    enabled: false                    # blocked on budget
+    role: FUTURE_PLAYER_AND_UEFA
+    rate_limit: {requests: 10, per_seconds: 60, daily: 100}
+    blocked_reason: >-
+      100 requests/day cannot cover ~2,500 fixtures of lineups, and the free
+      plan restricts historical seasons. Viable at a paid tier.

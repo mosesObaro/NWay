@@ -1,0 +1,132 @@
+# Competition registry. Adding a competition is a change HERE, never in code.
+#
+# TRAP, verified against the live API on 2026-09-20: football-data.org uses
+#   CL  = UEFA CHAMPIONS  League
+#   UCL = UEFA CONFERENCE League
+# Reading "UCL" as Champions League silently ingests the wrong competition.
+
+competitions:
+  domestic:
+    - slug: premier_league
+      name: Premier League
+      country: England
+      kind: DOMESTIC_LEAGUE
+      structure: ROUND_ROBIN
+      enabled: true
+      providers:
+        football_data_org: PL            # TIER_ONE (free)
+        football_data_couk: E0
+        openfootball: en.1
+      stats_history_from: "2000/01"      # measured
+      teams: 20
+
+    - slug: la_liga
+      name: La Liga
+      country: Spain
+      kind: DOMESTIC_LEAGUE
+      structure: ROUND_ROBIN
+      enabled: true
+      providers:
+        football_data_org: PD            # NOT "LL"
+        football_data_couk: SP1
+        openfootball: es.1
+      stats_history_from: "2005/06"
+      teams: 20
+
+    - slug: bundesliga
+      name: Bundesliga
+      country: Germany
+      kind: DOMESTIC_LEAGUE
+      structure: ROUND_ROBIN
+      enabled: true
+      providers:
+        football_data_org: BL1
+        football_data_couk: D1
+        openfootball: de.1
+      stats_history_from: "2000/01"
+      teams: 18
+
+    - slug: serie_a
+      name: Serie A
+      country: Italy
+      kind: DOMESTIC_LEAGUE
+      structure: ROUND_ROBIN
+      enabled: true
+      providers:
+        football_data_org: SA
+        football_data_couk: I1
+        openfootball: it.1
+      stats_history_from: "2005/06"
+      teams: 20
+
+    - slug: ligue_1
+      name: Ligue 1
+      country: France
+      kind: DOMESTIC_LEAGUE
+      structure: ROUND_ROBIN
+      enabled: true
+      providers:
+        football_data_org: FL1
+        football_data_couk: F1
+        openfootball: fr.1
+      stats_history_from: "2010/11"      # shots from 2005/06, CORNERS only from 2010/11
+      teams: 18                          # reduced from 20 in 2023/24
+
+    - slug: eredivisie
+      name: Eredivisie
+      country: Netherlands
+      kind: DOMESTIC_LEAGUE
+      structure: ROUND_ROBIN
+      enabled: true
+      providers:
+        football_data_org: DED
+        football_data_couk: N1
+        openfootball: nl.1
+      stats_history_from: "2017/18"      # shallow: gates corners/cards markets
+      teams: 18
+
+    - slug: primeira_liga
+      name: Primeira Liga
+      country: Portugal
+      kind: DOMESTIC_LEAGUE
+      structure: ROUND_ROBIN
+      enabled: true
+      providers:
+        football_data_org: PPL
+        football_data_couk: P1
+        openfootball: pt.1
+      stats_history_from: "2017/18"      # shallow
+      teams: 18
+
+  uefa:
+    - slug: champions_league
+      name: UEFA Champions League
+      kind: UEFA_CLUB
+      structure: LEAGUE_PHASE            # league phase, then knockout
+      enabled: true
+      providers:
+        football_data_org: CL            # Champions, not Conference
+      stats_history_from: null           # no free per-match statistics
+      notes: Fixtures and results only on the free tier.
+
+    - slug: europa_league
+      name: UEFA Europa League
+      kind: UEFA_CLUB
+      structure: LEAGUE_PHASE
+      enabled: false                     # blocked: football-data.org TIER_TWO (paid)
+      providers:
+        football_data_org: EL
+      blocked_reason: >-
+        Requires a paid plan on every free source checked on 2026-09-20.
+        See docs/DATA_SOURCES.md section 7.
+
+    - slug: conference_league
+      name: UEFA Conference League
+      kind: UEFA_CLUB
+      structure: LEAGUE_PHASE
+      enabled: false                     # blocked: football-data.org TIER_FOUR (paid)
+      providers:
+        football_data_org: UCL           # yes, UCL means CONFERENCE here
+      blocked_reason: >-
+        Requires a higher paid tier than the Europa League.
+        See docs/DATA_SOURCES.md section 7.

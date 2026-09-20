@@ -1,0 +1,78 @@
+models:
+  goals_dixon_coles:
+    enabled: true
+    family: DIXON_COLES
+    grid_size: 11                     # 0..10 goals per side, then renormalise
+    time_decay:
+      fit: true                       # xi is FITTED by held-out likelihood
+      search_range: [0.0005, 0.010]   # per day
+      initial: 0.0030                 # ~ 8 month half-life, a starting point only
+    shrinkage:
+      fit: true
+      l2_range: [0.01, 5.0]
+    per_competition_intercepts: true  # measured goal rates: 2.58 (La Liga) .. 3.12 (Bundesliga)
+    per_competition_home_advantage: true
+    crowd_present_indicator: true     # 2020/21: home wins 40.2% vs 46.1% in 2017/18
+    low_score_correction: true        # tau on (0,0) (1,0) (0,1) (1,1)
+    training:
+      min_matches: 1500
+      max_seasons_lookback: 9
+      refit_interval_days: 14
+
+  halves_dc:
+    enabled: false                    # Phase 11
+    family: DIXON_COLES
+    separate_half_rates: true         # measured 1.244 first half, 1.563 second
+    notes: A half is NOT lambda/2; the 2H/1H ratio is 1.256.
+
+  corners_nb:
+    enabled: false                    # Phase 10
+    family: NEGATIVE_BINOMIAL         # measured var/mean 1.18 total, 1.65 home
+    per_competition_intercepts: true
+    shared_match_intensity: true      # both sides' corners rise together
+    training: {min_matches: 2000}
+
+  cards_nb:
+    enabled: false                    # Phase 10
+    family: NEGATIVE_BINOMIAL         # measured var/mean 1.34
+    per_competition_intercepts: true  # 3.18 (Eredivisie) .. 5.39 (Primeira Liga)
+    referee_random_effect:
+      enabled: true
+      competitions: [premier_league]  # the only league with referee data
+    training: {min_matches: 2000}
+
+  goals_gbm_residual:
+    enabled: false                    # Phase 14; ships only if it earns its place
+    family: GBM
+    target: LOG_LAMBDA_RESIDUAL
+    promotion_rule: >-
+      Must beat plain Dixon-Coles on held-out log likelihood by more than the
+      bootstrap standard error, in walk-forward testing, with no competition
+      degrading beyond tolerance. Permitted to fail and be abandoned.
+
+calibration:
+  method_by_sample_size:
+    - {min_samples: 1000, method: ISOTONIC}
+    - {min_samples: 300,  method: PLATT}
+    - {min_samples: 0,    method: IDENTITY, recommendable: false}
+  pool_by: [market, competition]
+  fallback_pool_by: [market]
+  temporal_fit: true                  # fit window must END before the target period
+  max_acceptable_ece: 0.03
+
+validation:
+  scheme: WALK_FORWARD_EXPANDING
+  folds:
+    - {train_end: "2022-05-31", calibrate: "2022/23", test: "2023/24"}
+    - {train_end: "2023-05-31", calibrate: "2023/24", test: "2024/25"}
+    - {train_end: "2024-05-31", calibrate: "2024/25", test: "2025/26"}
+  sensitivity_scheme: WALK_FORWARD_ROLLING
+  in_season_refit_days: 14
+
+benchmarks:                           # measured; see research/evidence/
+  one_x_two_log_loss:
+    uniform: 1.0986
+    pooled_base_rate: 1.0711          # MUST beat this
+    target: 1.00
+    market_ceiling: 0.9563
+    leak_alarm_below: 0.95            # implausible: investigate before believing

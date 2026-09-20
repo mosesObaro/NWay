@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Scheduler entry for macOS launchd.
+
+  Install:
+    cp deploy/com.nway.tick.plist ~/Library/LaunchAgents/
+    # edit the paths below to match your checkout, then:
+    launchctl load ~/Library/LaunchAgents/com.nway.tick.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.nway.tick.plist
+
+  A missed tick is not a crisis: every tick re-evaluates the whole world from
+  scratch, so the next one recovers. Only a tick missed inside a send window
+  loses a batch, and the skip is recorded either way.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.nway.tick</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/obaromoses/Documents/NWay/.venv/bin/nway</string>
+    <string>tick</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/obaromoses/Documents/NWay</string>
+
+  <!-- Every 30 minutes, matching notifications.scheduler_interval_minutes. -->
+  <key>StartInterval</key>
+  <integer>1800</integer>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/obaromoses/Documents/NWay/data/tick.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/obaromoses/Documents/NWay/data/tick.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NWAY_LOG_LEVEL</key>
+    <string>INFO</string>
+  </dict>
+</dict>
+</plist>

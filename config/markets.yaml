@@ -1,0 +1,176 @@
+# Market registry.
+#
+# `base_rate` values are MEASURED over 21,545 matches, seven leagues,
+# 2017/18-2025/26 (research/feasibility_study.py). `min_probability` is NOT
+# hand-picked: it is computed by the rule below and pinned here so that the
+# effective value is visible in configuration rather than hidden in code.
+#
+#     floor = max(absolute_floor, base_rate + lift_k * (1 - base_rate))
+#     absolute_floor = 0.65      lift_k = 0.25
+#
+# Both terms are needed. The relative term makes the floor mean the same thing
+# across markets -- the model must be a quarter of the way from the market's own
+# base rate to certainty. The absolute term stops a low-base-rate market (an
+# away win at 49%) from qualifying as "high confidence" just by beating its own
+# base rate. Derivation and the supply sweep: research/threshold_study.py.
+
+thresholds:
+  absolute_floor: 0.65
+  lift_k: 0.25
+
+markets:
+  # ---- MVP: derived from the goal matrix -------------------------------
+  - key: HOME_WIN
+    family: RESULT
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.438
+    min_probability: 0.650        # absolute floor binds
+    enabled_competitions: [ALL]
+
+  - key: AWAY_WIN
+    family: RESULT
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.313
+    min_probability: 0.650        # absolute floor binds; only ~5% of fixtures clear it
+    enabled_competitions: [ALL]
+
+  - key: DRAW
+    family: RESULT
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.248
+    min_probability: 0.650
+    recommendable: false
+    disabled_reason: >-
+      Draw probability rarely exceeds ~33% for any model, so this market can
+      never clear the floor. Predicted and evaluated for completeness; never
+      recommended.
+
+  - key: DOUBLE_CHANCE_1X
+    family: DOUBLE_CHANCE
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.687
+    min_probability: 0.765        # relative term binds
+    enabled_competitions: [ALL]
+    correlated_with: [HOME_WIN, DRAW]
+
+  - key: DOUBLE_CHANCE_X2
+    family: DOUBLE_CHANCE
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.562
+    min_probability: 0.671
+    enabled_competitions: [ALL]
+    correlated_with: [AWAY_WIN, DRAW]
+
+  - key: OVER_1_5
+    family: TOTALS
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.771
+    min_probability: 0.828        # a 72% "high confidence" call here would be
+                                  # WEAKER than assuming the league average
+    enabled_competitions: [ALL]
+    correlated_with: [OVER_2_5, OVER_3_5, BTTS]
+
+  - key: OVER_2_5
+    family: TOTALS
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.533
+    min_probability: 0.650
+    enabled_competitions: [ALL]
+    correlated_with: [OVER_1_5, OVER_3_5, BTTS]
+
+  - key: UNDER_2_5
+    family: TOTALS
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.467
+    min_probability: 0.650
+    enabled_competitions: [ALL]
+
+  - key: BTTS
+    family: BTTS
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.535
+    min_probability: 0.651
+    enabled_competitions: [ALL]
+
+  - key: EXPECTED_GOALS
+    family: GOALS_NUMERIC
+    derived_from: GOAL_MATRIX
+    mvp: true
+    recommendable: false          # reported as supporting context, never selected
+
+  - key: GOAL_MARGIN
+    family: GOALS_NUMERIC
+    derived_from: GOAL_MATRIX
+    mvp: true
+    recommendable: false
+
+  # ---- Phase 11: half-time (half-time data is 100% complete) -----------
+  - key: HT_OVER_0_5
+    family: HALVES
+    derived_from: HALF_MATRIX
+    mvp: false
+    base_rate: 0.712
+    min_probability: 0.784
+    enabled_competitions: []      # enable per league after Phase 11 validation
+
+  # ---- Phase 10: corners (negative binomial, var/mean 1.18 measured) ---
+  - key: CORNERS_OVER_8_5
+    family: CORNERS
+    model: corners_nb
+    mvp: false
+    base_rate: 0.612
+    min_probability: 0.709
+    enabled_competitions: []      # gated on min_training_matches below
+    requires_stats: [corners]
+
+  - key: CORNERS_OVER_9_5
+    family: CORNERS
+    model: corners_nb
+    mvp: false
+    base_rate: 0.497
+    min_probability: 0.650
+    enabled_competitions: []
+    requires_stats: [corners]
+
+  # ---- Phase 10: cards (var/mean 1.34 measured) -------------------------
+  - key: CARDS_OVER_3_5
+    family: CARDS
+    model: cards_nb
+    mvp: false
+    min_probability: 0.650
+    enabled_competitions: []
+    requires_stats: [yellow_cards, red_cards]
+    notes: >-
+      Measured league means span 3.18 (Eredivisie) to 5.39 (Primeira Liga), so
+      per-competition intercepts are mandatory and a pooled base_rate would be
+      meaningless. Referee identity is available for the Premier League only.
+
+  # ---- Blocked on data, not effort -------------------------------------
+  - key: ANYTIME_SCORER
+    family: PLAYER
+    mvp: false
+    enabled_competitions: []
+    blocked_reason: >-
+      No free, terms-compliant source for lineups, expected minutes or
+      injuries. See docs/DATA_SOURCES.md section 9.
+
+# A market is enabled for a competition only when its training sample clears
+# this floor. This is why Eredivisie and Primeira Liga corners (~2,750 matches
+# of history, stats only from 2017/18) enter later than England's (~9,900).
+eligibility:
+  min_training_matches:
+    GOAL_MATRIX: 1500
+    HALVES: 1500
+    CORNERS: 2000
+    CARDS: 2000
+  min_settled_predictions: 500     # before a market may be recommended at all
+  max_holdout_ece: 0.05

@@ -1,0 +1,21 @@
+[project]
+name = "nway"
+version = "0.1.0"
+description = "Probabilistic football match prediction, recommendation and validation"
+requires-python = ">=3.12"
+dependencies = ["numpy>=1.26", "scipy>=1.11", "PyYAML>=6.0"]
+
+[project.scripts]
+nway = "nway.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = ["ignore::DeprecationWarning"]
