@@ -25,10 +25,17 @@ log = get_logger(__name__)
 AUTO_ACCEPT = 0.90
 QUEUE_BELOW = 0.90
 
-_SUFFIXES = (
-    " fc", " cf", " afc", " sc", " ac", " as", " ssc", " sv", " tsg", " vfl",
-    " vfb", " bsc", " fsv", " sad", " cp", " cd", " ud", " rc", " sp",
-)
+# Club designators appear at BOTH ends depending on the provider and the
+# country: "Bournemouth" / "AFC Bournemouth", "Schalke 04" / "FC Schalke 04",
+# "Sporting CP" / "Sporting Clube". Stripping only suffixes left 44 real
+# fixtures unresolved on the first live ingest.
+_DESIGNATORS = frozenset((
+    "fc", "cf", "afc", "sc", "ac", "as", "ss", "ssc", "sv", "tsg", "vfl",
+    "vfb", "bsc", "fsv", "sad", "cd", "ud", "rc", "sk", "fk", "nk", "bv",
+    "rcd", "acf", "asd", "us", "ogc", "rz",
+))
+# Numeric club prefixes: "1. FC Koln", "1899 Hoffenheim", "04 Leverkusen".
+_NUMERIC_PREFIX = re.compile(r"^(1|18\d\d|19\d\d|0\d)$")
 _PUNCT = re.compile(r"[^a-z0-9 ]+")
 _SPACES = re.compile(r"\s+")
 
@@ -40,10 +47,17 @@ def normalise_name(name: str) -> str:
     text = text.lower().strip()
     text = _PUNCT.sub(" ", text)
     text = _SPACES.sub(" ", text).strip()
-    for suffix in _SUFFIXES:
-        if text.endswith(suffix):
-            text = text[: -len(suffix)].strip()
-    return text
+
+    tokens = text.split()
+    # Strip designators from the front, then the back, but never reduce a name
+    # to nothing: "FC" alone must stay "fc" rather than become empty and match
+    # every other stripped-to-empty name.
+    while len(tokens) > 1 and (tokens[0] in _DESIGNATORS
+                               or _NUMERIC_PREFIX.match(tokens[0])):
+        tokens = tokens[1:]
+    while len(tokens) > 1 and tokens[-1] in _DESIGNATORS:
+        tokens = tokens[:-1]
+    return " ".join(tokens)
 
 
 # Curated aliases: provider spelling -> canonical name. Every entry here was
@@ -181,6 +195,15 @@ _RAW_TEAM_ALIASES: dict[str, str] = {
     # Chaves and Aves are DIFFERENT clubs whose names fuzzy-match at 0.80.
     # The resolver correctly refused to merge them; these entries make the
     # distinction explicit rather than leaving it to a threshold.
+    # Surfaced by the review queue on the first live ingest. Added explicitly
+    # rather than by widening normalisation: each extra stripped token raises
+    # the chance of collapsing two real clubs into one.
+    "ado den haag": "ADO Den Haag", "den haag": "ADO Den Haag",
+    "cs maritimo": "Maritimo",
+    "es troyes": "Troyes", "troyes": "Troyes",
+    "sbv excelsior": "Excelsior",
+    "paderborn 07": "Paderborn", "paderborn": "Paderborn",
+    "sporting clube de braga": "Sporting Braga",
     "chaves": "GD Chaves", "gd chaves": "GD Chaves",
     "aves": "Desportivo das Aves", "desportivo aves": "Desportivo das Aves",
     "feirense": "Feirense", "cd feirense": "Feirense",

@@ -63,3 +63,43 @@ def test_alias_table_has_no_self_contradiction():
         assert key == normalise_name(key), f"alias key {key!r} is not normalised"
         seen.setdefault(key, value)
         assert seen[key] == value
+
+
+@pytest.mark.parametrize("provider_spelling,other_spelling", [
+    # Real pairs that the first live ingest rejected: the designator is a
+    # PREFIX here, and stripping only suffixes left 44 fixtures unresolved.
+    ("AFC Bournemouth", "Bournemouth"),
+    ("FC Schalke 04", "Schalke 04"),
+    ("RCD Mallorca", "Mallorca"),
+    ("SV Werder Bremen", "Werder Bremen"),
+    ("AC Milan", "Milan"),
+    ("1. FC Koln", "FC Koln"),
+])
+def test_prefixed_designators_normalise_to_the_same_name(provider_spelling,
+                                                         other_spelling):
+    assert normalise_name(provider_spelling) == normalise_name(other_spelling)
+
+
+@pytest.mark.parametrize("a,b", [
+    ("AC Milan", "Inter Milan"),
+    ("Manchester United FC", "Manchester City FC"),
+    ("Sporting CP", "Sporting Gijon"),
+    ("Real Madrid", "Real Sociedad"),
+    ("Atletico Madrid", "Real Madrid"),
+])
+def test_stripping_designators_does_not_merge_distinct_clubs(a, b):
+    """Prefix stripping is aggressive; this guards against it going too far.
+
+    Known and accepted limitation: designator stripping WILL collide across
+    confederations -- "FC Barcelona" and Ecuador's "Barcelona SC" both reduce
+    to "barcelona". Resolution is scoped to the eight configured competitions,
+    where no such pair occurs, and anything ambiguous goes to the review queue
+    rather than being guessed.
+    """
+    assert normalise_name(a) != normalise_name(b)
+
+
+def test_a_bare_designator_is_not_stripped_to_nothing():
+    """Otherwise every such name normalises to '' and matches every other."""
+    assert normalise_name("FC") == "fc"
+    assert normalise_name("AC") == "ac"

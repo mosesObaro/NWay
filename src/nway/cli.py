@@ -141,7 +141,7 @@ def cmd_explain(args, config) -> int:
 def cmd_check(args, config) -> int:
     from nway.diagnostics import render, run_checks
 
-    checks = run_checks(config)
+    checks = run_checks(config, send_test=args.send_test)
     print(render(checks))
     return 1 if any(c.status == "fail" for c in checks) else 0
 
@@ -255,9 +255,13 @@ def build_parser() -> argparse.ArgumentParser:
     explain.add_argument("--prediction-id", type=int, required=True)
     explain.set_defaults(func=cmd_explain)
 
-    sub.add_parser(
-        "check", help="verify credentials and data are set up correctly"
-    ).set_defaults(func=cmd_check)
+    check = sub.add_parser(
+        "check", help="verify credentials and data are set up correctly")
+    check.add_argument(
+        "--send-test", action="store_true",
+        help="also SEND one real test email to NWAY_EMAIL_TO "
+             "(the only definitive proof that delivery works)")
+    check.set_defaults(func=cmd_check)
 
     demo = sub.add_parser(
         "demo", help="replay a historical matchday end to end (no credentials needed)")
