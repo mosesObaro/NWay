@@ -15,6 +15,7 @@ and letting it overwrite a true kickoff would corrupt the scheduling key.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 from dataclasses import dataclass
 
 from nway import clock
@@ -91,6 +92,12 @@ def ingest_history(db: Database, config: Config, seasons: list[str],
         if c.providers.get(couk.SOURCE)
         and (competitions is None or c.slug in competitions)
     ]
+    # football-data.co.uk answers some unknown division codes with ANOTHER
+    # division's file, byte for byte: requesting "I1W" returns men's Serie A
+    # with a 200. The Div column is empty in current files, so content identity
+    # is the only available signal. Two divisions producing the same fixtures
+    # in the same season means one of them is not what it claims to be.
+    seen_signatures: dict[tuple[str, str], str] = {}
 
     for competition in targets:
         division = competition.providers[couk.SOURCE]
@@ -109,6 +116,23 @@ def ingest_history(db: Database, config: Config, seasons: list[str],
                 continue
             if not matches:
                 continue
+
+            signature = hashlib.sha256(
+                "|".join(f"{m.date}{m.home_name}{m.away_name}"
+                         for m in matches).encode()).hexdigest()[:16]
+            clash = seen_signatures.get((season_label, signature))
+            if clash and clash != division:
+                repo.record_quality_check(
+                    db, "DIVISION_CONTENT_COLLISION", "BLOCKING",
+                    f"{division} returned the same fixtures as {clash} for "
+                    f"{season_label}; the provider is serving the wrong file "
+                    f"for one of these codes")
+                log.error("division served another division's data", context={
+                    "requested": division, "identical_to": clash,
+                    "season": season_label})
+                summary.errors += 1
+                continue
+            seen_signatures[(season_label, signature)] = division
 
             dates = [m.date for m in matches]
             season_id = repo.upsert_season(

@@ -172,6 +172,12 @@ Recorded output is in [research/evidence/](research/evidence/).
   injuries at the required volume, so they are not generated at all.
 - **No Europa or Conference League.** Both sit behind paid tiers on every free
   source checked. Adding them is a YAML edit once a plan is in place.
+- **No Nations League or Women's Champions League.** Registered and disabled.
+  The Nations League is a paid tier *and* international football, which the
+  club-fitted model cannot predict; the Women's Champions League has no source
+  on football-data.org, football-data.co.uk, openfootball or StatsBomb open
+  data. Both would need their own trained model, not just a configuration
+  change — see [DATA_SOURCES.md §7b](docs/DATA_SOURCES.md).
 - **Corners and cards are modelled but not enabled.** The data supports them
   (measured overdispersion 1.18 and 1.34, so negative binomial rather than
   Poisson), but they are gated per league until the training sample clears the

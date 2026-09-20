@@ -64,6 +64,11 @@ class Competition:
     stats_history_from: str | None = None
     teams: int | None = None
     blocked_reason: str | None = None
+    # Which trained model may serve this competition. Team ratings are
+    # per-team and share nothing across scopes, so a men's club model cannot
+    # predict national teams or women's clubs however the data arrives.
+    model_scope: str = "mens_club"
+    group: str = "domestic"
 
     @property
     def is_uefa(self) -> bool:
@@ -168,9 +173,12 @@ def load_config(config_dir: Path | None = None) -> Config:
         documents[name] = _expand(yaml.safe_load(path.read_text()) or {})
 
     competitions: list[Competition] = []
-    groups = documents["competitions"].get("competitions", {})
-    for group in ("domestic", "uefa"):
-        for entry in groups.get(group, []) or []:
+    groups = documents["competitions"].get("competitions", {}) or {}
+    # Read every group, not a fixed pair: adding a category of competition
+    # (women's club, international) must be a configuration change, which is
+    # the whole point of the registry.
+    for group in sorted(groups):
+        for entry in groups.get(group) or []:
             competitions.append(Competition(
                 slug=entry["slug"], name=entry["name"], kind=entry["kind"],
                 structure=entry["structure"], enabled=bool(entry.get("enabled", False)),
@@ -179,6 +187,8 @@ def load_config(config_dir: Path | None = None) -> Config:
                 stats_history_from=entry.get("stats_history_from"),
                 teams=entry.get("teams"),
                 blocked_reason=entry.get("blocked_reason"),
+                model_scope=entry.get("model_scope", "mens_club"),
+                group=group,
             ))
 
     markets: list[Market] = []

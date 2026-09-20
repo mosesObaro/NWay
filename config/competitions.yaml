@@ -130,3 +130,48 @@ competitions:
       blocked_reason: >-
         Requires a higher paid tier than the Europa League.
         See docs/DATA_SOURCES.md section 7.
+
+  # Women's club football. Registered so the competition exists as a
+  # first-class entity and can be enabled the moment a source is available.
+  uefa_women:
+    - slug: womens_champions_league
+      name: UEFA Women's Champions League
+      kind: UEFA_WOMEN_CLUB
+      structure: LEAGUE_PHASE
+      enabled: false
+      providers: {}                      # no provider carries it
+      model_scope: womens_club           # cannot share the men's club model
+      blocked_reason: >-
+        No source. Verified 2026-09-20: football-data.org does not list this
+        competition at any tier (its only women's entry is the Women's Euro,
+        a national-team tournament); football-data.co.uk publishes no women's
+        divisions; openfootball has no women's repository among its 36; and
+        StatsBomb's open data carries several women's leagues but not this
+        competition. Separately, it could not use the existing goal model even
+        with fixtures: team ratings are per-team and fitted on men's club
+        sides, so every team would be unrated. It needs its own source, its own
+        training history and its own trained model.
+
+  # National-team football. A different sport as far as this system's model is
+  # concerned: no squad continuity between matches, windows months apart, and
+  # no overlap with the club teams the model was fitted on.
+  international:
+    - slug: nations_league
+      name: UEFA Nations League
+      kind: INTERNATIONAL
+      structure: LEAGUE_PHASE
+      enabled: false
+      providers:
+        football_data_org: UNL           # TIER_FOUR
+      model_scope: international
+      blocked_reason: >-
+        Paid tier, and unusable by the current model even if bought. Verified
+        2026-09-20: UNL is TIER_FOUR on football-data.org and a direct request
+        with a free-tier token returns HTTP 403. football-data.co.uk publishes
+        no international fixtures, so there is no statistics history to train
+        on. Beyond access, national teams share no ratings with the club sides
+        the goal model was fitted on -- every team would fall back to the
+        league average -- and a team that plays roughly ten matches a year in
+        windows months apart breaks the rolling-form features the system is
+        built on. Enabling it needs a separate model trained on international
+        results, not a configuration change.

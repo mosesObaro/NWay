@@ -108,6 +108,14 @@ class PredictionPipeline:
 
         if self.artifact is not None:
             self.artifact.assert_usable_at(as_of)
+            scope = "mens_club"
+            slug = fixture.get("competition_slug")
+            if slug:
+                try:
+                    scope = self.config.competition(slug).model_scope
+                except KeyError:
+                    scope = "mens_club"
+            self.artifact.assert_scope(scope)
 
         context = FeatureContext.build(self.db, fixture, as_of, self.config)
         features = compute_features(context)

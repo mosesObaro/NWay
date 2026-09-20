@@ -183,6 +183,47 @@ should be considered:
 The competition registry is configuration-driven precisely so that adding these
 later is a YAML edit plus a provider mapping row — no code change.
 
+## 7b. Gap: UEFA Nations League and Women's Champions League
+
+Both are registered in `config/competitions.yaml` and both are disabled.
+Verified 2026-09-20.
+
+**UEFA Nations League (`UNL`)** exists on football-data.org but is `TIER_FOUR`;
+a direct request with a free-tier token returns **HTTP 403**. Buying access
+would not be enough on its own. It is national-team football: the goal model is
+fitted on club sides, so no national team has a rating and every one would fall
+back to the competition average. Teams play roughly ten matches a year in
+windows months apart, which breaks the rolling-form features the system is
+built on, and football-data.co.uk publishes no international fixtures, so there
+is no statistics history to train a replacement on. It needs its own model
+trained on international results.
+
+**UEFA Women's Champions League** has no source at all in this stack:
+
+| Source | Result |
+|---|---|
+| football-data.org | Not listed at any tier. Its only women's entry is `ECF`, the Women's Euro — a national-team tournament |
+| football-data.co.uk | No women's divisions (see the trap below) |
+| openfootball | No women's repository among its 36 |
+| StatsBomb open data | Carries FA WSL, Frauen Bundesliga, Liga F, NWSL, Serie A Women and the Women's Euro — **not** this competition, and only showcase seasons |
+
+Even with fixtures it could not use the existing model, for the same reason:
+women's club sides share no ratings with the men's club sides it was fitted on.
+
+**A trap worth naming.** football-data.co.uk answers some unknown division
+codes with *another division's file*, byte for byte: a request for `I1W`
+returns men's Serie A with HTTP 200 and an identical SHA-256 to `I1`. Clearly
+invalid codes (`ZZ9`, `WCL`) do 404, so this only affects near-misses — which
+is exactly what a speculative women's or second-tier code looks like. The `Div`
+column is empty in current files, so ingestion cannot validate against it and
+instead compares content across divisions within a season, raising a
+`BLOCKING` quality check when two codes return the same fixtures.
+
+Adding either competition later is a configuration change plus a separately
+trained model, not a code change. The `model_scope` field on each competition
+records which model may serve it, and a model refuses to predict a scope it was
+not fitted on.
+
 ## 8. Gap: expected goals (xG)
 
 There is **no free, terms-compliant, continuously-updated xG source** for these

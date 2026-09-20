@@ -20,6 +20,10 @@ class LeakageError(RuntimeError):
     """A model was asked to predict at a time before its training window ended."""
 
 
+class ScopeError(RuntimeError):
+    """A model was asked to predict a competition it was never fitted on."""
+
+
 @dataclass
 class ModelArtifact:
     model_version: str
@@ -32,6 +36,11 @@ class ModelArtifact:
     parameters: dict[str, Any]
     metrics: dict[str, Any] = field(default_factory=dict)
     feature_version: str | None = None
+    # Team ratings are per-team and share nothing across scopes. A model fitted
+    # on men's club sides has no rating for a national team or a women's club,
+    # and would silently fall back to the competition average -- a confident
+    # looking number produced from nothing.
+    model_scope: str = "mens_club"
 
     def assert_usable_at(self, as_of: dt.datetime) -> None:
         """A model may not predict a moment that its training data already saw.
@@ -46,6 +55,13 @@ class ModelArtifact:
                 f"model {self.model_version} trained through "
                 f"{clock.to_iso(self.train_window_end)} cannot predict at "
                 f"{clock.to_iso(as_of)}")
+
+    def assert_scope(self, competition_scope: str) -> None:
+        if competition_scope != self.model_scope:
+            raise ScopeError(
+                f"model {self.model_version} is fitted on '{self.model_scope}' "
+                f"and cannot predict a '{competition_scope}' competition; "
+                f"train a separate model for that scope")
 
     def path(self) -> Path:
         ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)

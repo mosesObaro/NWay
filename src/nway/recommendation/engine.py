@@ -64,6 +64,9 @@ class Candidate:
     model_version: str
     fixture_status: str
     kickoff_is_confirmed: bool
+    # Fewest completed matches known for either side, from the stored features.
+    team_history_matches: int | None = None
+    model_scope: str = "mens_club"
 
     @property
     def match_label(self) -> str:
@@ -128,7 +131,13 @@ class RecommendationEngine:
                    r.model_version, f.kickoff_utc, f.status, f.kickoff_is_confirmed,
                    f.competition_id, c.slug AS competition_slug,
                    c.name AS competition_name,
-                   h.canonical_name AS home_team, a.canonical_name AS away_team
+                   h.canonical_name AS home_team, a.canonical_name AS away_team,
+                   (SELECT MIN(fv.value) FROM feature_value fv
+                     WHERE fv.fixture_id = p.fixture_id
+                       AND fv.as_of = r.prediction_timestamp
+                       AND fv.feature_key IN ('match.home_history_matches',
+                                              'match.away_history_matches')
+                   ) AS team_history_matches
             FROM prediction p
             JOIN prediction_run r ON r.prediction_run_id = p.prediction_run_id
             JOIN fixture f ON f.fixture_id = p.fixture_id
@@ -158,6 +167,8 @@ class RecommendationEngine:
             lambda_home=row["lambda_home"], lambda_away=row["lambda_away"],
             model_version=row["model_version"], fixture_status=row["status"],
             kickoff_is_confirmed=bool(row["kickoff_is_confirmed"]),
+            team_history_matches=(None if row["team_history_matches"] is None
+                                  else int(row["team_history_matches"])),
         ) for row in rows]
 
     # -- eligibility -------------------------------------------------------
@@ -194,6 +205,15 @@ class RecommendationEngine:
         staleness_limit = float(self.eligibility.get("max_feature_staleness_hours", 96))
         if candidate.feature_staleness_hours > staleness_limit:
             reasons.append("STALE_FEATURES")
+
+        # Declared in config but previously unread. Data completeness usually
+        # catches a team with no history, but not always: a side with three
+        # matches can clear the completeness bar on short windows while its
+        # rating is still essentially the competition average.
+        minimum_history = int(self.eligibility.get("min_team_history_matches", 5))
+        if minimum_history and candidate.team_history_matches is not None \
+                and candidate.team_history_matches < minimum_history:
+            reasons.append("INSUFFICIENT_TEAM_HISTORY")
 
         lead_time = clock.hours_between(now, candidate.kickoff_utc)
         if lead_time < float(self.eligibility.get("min_lead_time_hours", 0.25)):

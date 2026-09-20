@@ -174,3 +174,27 @@ def test_rejection_reasons_are_recorded_for_every_candidate(db, config):
     summary = RecommendationEngine.rejection_summary(scored)
     assert "BELOW_PROBABILITY_FLOOR" in summary
     assert "STALE_FEATURES" in summary
+
+
+def test_thin_team_history_is_rejected(db, config):
+    """A side with three matches can clear the completeness bar on short
+    windows while its rating is still the competition average."""
+    engine = RecommendationEngine(db, config)
+    newcomer = candidate(db, config)
+    newcomer.team_history_matches = 2
+    assert "INSUFFICIENT_TEAM_HISTORY" in engine.check_eligibility(newcomer, NOW)
+
+
+def test_sufficient_team_history_passes(db, config):
+    engine = RecommendationEngine(db, config)
+    established = candidate(db, config)
+    established.team_history_matches = 20
+    assert "INSUFFICIENT_TEAM_HISTORY" not in engine.check_eligibility(established, NOW)
+
+
+def test_unknown_team_history_does_not_block(db, config):
+    """Older predictions predate the stored feature; absence is not evidence."""
+    engine = RecommendationEngine(db, config)
+    legacy = candidate(db, config)
+    legacy.team_history_matches = None
+    assert "INSUFFICIENT_TEAM_HISTORY" not in engine.check_eligibility(legacy, NOW)
