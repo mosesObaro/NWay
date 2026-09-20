@@ -24,7 +24,7 @@ from typing import Protocol, Sequence
 
 import numpy as np
 
-from nway.evaluation.metrics import expected_calibration_error
+from nway.evaluation.metrics import expected_calibration_error, log_loss_binary
 
 ISOTONIC_MIN_SAMPLES = 1000
 PLATT_MIN_SAMPLES = 300
@@ -101,6 +101,24 @@ class IsotonicCalibrator:
     method: str = "ISOTONIC"
     n_samples: int = 0
 
+    @staticmethod
+    def _pava(values: list[float], weights: list[float]) -> tuple[list[float], list[float]]:
+        """Pool adjacent violators. Returns block values and block weights."""
+        values, weights = list(values), list(weights)
+        i = 0
+        while i < len(values) - 1:
+            if values[i] <= values[i + 1]:
+                i += 1
+                continue
+            total = weights[i] + weights[i + 1]
+            values[i] = (values[i] * weights[i]
+                         + values[i + 1] * weights[i + 1]) / total
+            weights[i] = total
+            del values[i + 1], weights[i + 1]
+            if i > 0:
+                i -= 1
+        return values, weights
+
     def fit(self, probabilities: Sequence[float],
             outcomes: Sequence[int]) -> "IsotonicCalibrator":
         p = np.asarray(probabilities, dtype=float)
@@ -108,21 +126,25 @@ class IsotonicCalibrator:
         order = np.argsort(p, kind="mergesort")
         xs, ys = p[order], y[order]
 
-        values = list(ys)
-        weights = [1.0] * len(ys)
-        positions = list(range(len(ys)))
-        i = 0
-        while i < len(values) - 1:
-            if values[i] <= values[i + 1]:
-                i += 1
-                continue
-            total_weight = weights[i] + weights[i + 1]
-            pooled = (values[i] * weights[i] + values[i + 1] * weights[i + 1]) / total_weight
-            values[i] = pooled
-            weights[i] = total_weight
-            del values[i + 1], weights[i + 1], positions[i + 1]
-            if i > 0:
-                i -= 1
+        values, weights = self._pava(list(ys), [1.0] * len(ys))
+
+        # Laplace-smooth each block: (hits + 1) / (block size + 2).
+        #
+        # Raw PAVA returns each block's empirical rate, so a top block whose
+        # every sample happened to be a hit yields exactly 1.0 -- the
+        # calibrator asserting certainty about a football match from a handful
+        # of tail observations. The correction scales with block size:
+        # negligible for the large blocks mid-range, decisive for the small
+        # ones in the tails, which is exactly where saturation happens.
+        smoothed = [(value * weight + 1.0) / (weight + 2.0)
+                    for value, weight in zip(values, weights)]
+
+        # Smoothing shrinks small blocks toward 0.5, which can pull a small
+        # high block BELOW a large one beneath it and break monotonicity -- and
+        # a calibrator that reorders predictions destroys the ranking the
+        # recommendation engine depends on. A second pooling pass restores the
+        # ordering while keeping the shrinkage.
+        values, weights = self._pava(smoothed, weights)
 
         fitted = np.empty(len(ys))
         cursor = 0
@@ -130,6 +152,7 @@ class IsotonicCalibrator:
             span = int(round(weight))
             fitted[cursor:cursor + span] = value
             cursor += span
+
         self.x, self.y = xs, fitted
         self.n_samples = len(ys)
         return self
@@ -200,38 +223,86 @@ class CalibrationResult:
         return self.ece_after <= self.ece_before
 
 
+def _candidates(n: int, isotonic_min: int, platt_min: int) -> list[str]:
+    """Which methods are worth trying at this sample size."""
+    methods = ["IDENTITY"]
+    if n >= platt_min:
+        methods += ["PLATT", "BETA"]
+    if n >= isotonic_min:
+        methods.append("ISOTONIC")
+    return methods
+
+
+def _build(method: str, probabilities, outcomes) -> Calibrator:
+    if method == "ISOTONIC":
+        return IsotonicCalibrator().fit(probabilities, outcomes)
+    if method == "PLATT":
+        return PlattCalibrator().fit(probabilities, outcomes)
+    if method == "BETA":
+        return BetaCalibrator().fit(probabilities, outcomes)
+    return IdentityCalibrator(n_samples=len(probabilities))
+
+
 def fit_calibrator(probabilities: Sequence[float], outcomes: Sequence[int],
                    fit_window_start: dt.datetime | None = None,
                    fit_window_end: dt.datetime | None = None,
                    isotonic_min: int = ISOTONIC_MIN_SAMPLES,
-                   platt_min: int = PLATT_MIN_SAMPLES) -> CalibrationResult:
-    """Choose and fit a calibrator by sample size."""
+                   platt_min: int = PLATT_MIN_SAMPLES,
+                   holdout_fraction: float = 0.30) -> CalibrationResult:
+    """Fit every applicable method and keep the one that scores best out of sample.
+
+    Two decisions here matter more than the mechanics.
+
+    *The score is measured on a held-out tail, never on the fitting data.*
+    Scoring a calibrator on its own training set returns an ECE near zero by
+    construction -- it is fitting those exact points -- which looks like
+    perfect calibration and tells you nothing. The split is temporal, matching
+    how the calibrator is actually used: fitted on the past, applied to the
+    future.
+
+    *Selection is on log loss, not ECE.* ECE alone cannot distinguish a useful
+    calibrator from one that has flattened every prediction to the base rate --
+    a constant output can score a fine ECE while carrying no information.
+    Isotonic does exactly that at the top of the range here, where the sample
+    thins out. Log loss is a proper scoring rule, so it penalises both
+    miscalibration and lost discrimination, which is what the recommendation
+    engine needs preserved.
+    """
     n = len(probabilities)
     ece_before = expected_calibration_error(probabilities, outcomes, equal_count=True)
 
-    if n >= isotonic_min:
-        calibrator: Calibrator = IsotonicCalibrator().fit(probabilities, outcomes)
-    elif n >= platt_min:
-        calibrator = PlattCalibrator().fit(probabilities, outcomes)
-    else:
+    if n < platt_min:
         calibrator = IdentityCalibrator(n_samples=n)
         return CalibrationResult(calibrator, calibrator.method, n, ece_before,
                                  ece_before, recommendable=False,
                                  fit_window_start=fit_window_start,
                                  fit_window_end=fit_window_end)
 
-    ece_after = expected_calibration_error(
-        calibrator.transform(probabilities), outcomes, equal_count=True)
+    split = int(n * (1.0 - holdout_fraction))
+    train_p, train_y = probabilities[:split], outcomes[:split]
+    test_p, test_y = probabilities[split:], outcomes[split:]
 
-    # If recalibration made things worse on its own fitting data, something is
-    # wrong; fall back rather than ship a calibrator that hurts.
-    if not math.isnan(ece_after) and not math.isnan(ece_before) and ece_after > ece_before * 1.5:
-        identity = IdentityCalibrator(n_samples=n)
-        return CalibrationResult(identity, identity.method, n, ece_before,
-                                 ece_before, recommendable=True,
-                                 fit_window_start=fit_window_start,
-                                 fit_window_end=fit_window_end)
+    best_method, best_loss, best_ece = "IDENTITY", float("inf"), ece_before
+    if split >= platt_min and len(test_p) >= 50:
+        for method in _candidates(split, isotonic_min, platt_min):
+            try:
+                trial = _build(method, train_p, train_y)
+                adjusted = trial.transform(test_p)
+            except Exception:  # noqa: BLE001 - a failed fit is simply not a candidate
+                continue
+            loss = log_loss_binary(adjusted, test_y)
+            if math.isnan(loss):
+                continue
+            if loss < best_loss:
+                best_method = method
+                best_loss = loss
+                best_ece = expected_calibration_error(adjusted, test_y,
+                                                      equal_count=True)
 
-    return CalibrationResult(calibrator, calibrator.method, n, ece_before, ece_after,
-                             recommendable=True, fit_window_start=fit_window_start,
-                             fit_window_end=fit_window_end)
+    # The shipped calibrator is refitted on the whole window; only its METHOD
+    # and its SCORE came from the holdout.
+    calibrator = _build(best_method, probabilities, outcomes)
+    return CalibrationResult(
+        calibrator, calibrator.method, n, ece_before, best_ece,
+        recommendable=True, fit_window_start=fit_window_start,
+        fit_window_end=fit_window_end)

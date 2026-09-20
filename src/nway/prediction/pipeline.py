@@ -36,6 +36,12 @@ log = get_logger(__name__)
 
 # Which derived keys become stored predictions. Numeric quantities are stored
 # on the run (lambda_home/away) and as expected_value, not as probabilities.
+# No football outcome is certain. Even after Laplace-smoothed calibration, a
+# displayed "100%" would contradict the uncertainty notice the email carries,
+# so this is a hard backstop independent of any calibrator's behaviour.
+MAX_PROBABILITY = 0.99
+MIN_PROBABILITY = 0.01
+
 STORED_MARKETS = (
     "HOME_WIN", "DRAW", "AWAY_WIN", "DOUBLE_CHANCE_1X", "DOUBLE_CHANCE_X2",
     "OVER_0_5", "OVER_1_5", "OVER_2_5", "OVER_3_5", "UNDER_2_5", "BTTS",
@@ -135,7 +141,8 @@ class PredictionPipeline:
             if raw is None:
                 continue
             calibrator = self._calibrator(market_key, fixture["competition_id"])
-            calibrated[market_key] = float(calibrator.transform([raw])[0])
+            value = float(calibrator.transform([raw])[0])
+            calibrated[market_key] = min(MAX_PROBABILITY, max(MIN_PROBABILITY, value))
             calibrator_versions[market_key] = getattr(calibrator, "version", None)
 
         league_baseline = context.repo.competition_baseline(fixture["competition_id"])

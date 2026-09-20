@@ -40,19 +40,71 @@ def test_platt_corrects_a_systematic_shift():
     assert after < before
 
 
-def test_method_is_chosen_by_sample_size():
-    """Isotonic needs data; below the floor the market is not recommendable."""
-    predicted, outcomes = miscalibrated(n=5000)
-    assert fit_calibrator(predicted, outcomes).method == "ISOTONIC"
-
-    predicted, outcomes = miscalibrated(n=500)
-    assert fit_calibrator(predicted, outcomes).method == "PLATT"
-
+def test_below_the_sample_floor_nothing_is_fitted():
+    """Too little data to calibrate means the market is not recommendable."""
     predicted, outcomes = miscalibrated(n=100)
     result = fit_calibrator(predicted, outcomes)
     assert result.method == "IDENTITY"
-    assert result.recommendable is False, \
-        "a market below the sample floor must not be recommendable"
+    assert result.recommendable is False
+
+
+def test_method_is_chosen_by_held_out_performance():
+    """Selection competes every applicable method rather than picking by size.
+
+    A fixed size rule shipped isotonic for the goal markets, where it collapsed
+    everything above raw 0.85 to a single value.
+    """
+    predicted, outcomes = miscalibrated(n=5000)
+    result = fit_calibrator(predicted, outcomes)
+    assert result.method in ("ISOTONIC", "PLATT", "BETA", "IDENTITY")
+    # Whatever wins must actually help on data it did not see.
+    assert result.ece_after <= result.ece_before + 0.02
+
+
+def test_calibration_never_claims_certainty():
+    """A displayed "100%" would contradict the uncertainty notice the email
+    carries, and no football outcome is certain."""
+    # An extreme case: every high prediction in the fitting data came in.
+    truth = np.concatenate([RNG.uniform(0.2, 0.6, 3000),
+                            RNG.uniform(0.93, 0.99, 600)])
+    outcomes = np.concatenate([
+        (RNG.uniform(0, 1, 3000) < truth[:3000]).astype(int),
+        np.ones(600, dtype=int),          # every tail sample a hit
+    ])
+    result = fit_calibrator(truth, outcomes)
+    transformed = result.calibrator.transform(
+        [0.90, 0.95, 0.97, 0.99, 0.995, 0.999])
+    assert transformed.max() < 1.0, "the calibrator asserted certainty"
+    assert transformed.min() > 0.0
+
+
+def test_calibration_preserves_discrimination():
+    """A calibrator that flattens the top of the range is useless to ranking.
+
+    Isotonic did exactly this: raw 0.85 through 0.99 all mapped to 0.832, so a
+    genuinely 99% match and an 85% one became indistinguishable.
+    """
+    predicted, outcomes = miscalibrated(n=5000)
+    result = fit_calibrator(predicted, outcomes)
+    grid = np.array([0.70, 0.78, 0.85, 0.90, 0.95, 0.99])
+    out = result.calibrator.transform(grid)
+    distinct = len(set(np.round(out, 4)))
+    assert distinct >= 4, (
+        f"only {distinct} distinct outputs from 6 distinct inputs; "
+        f"the calibrator has flattened the range")
+
+
+def test_reported_ece_is_measured_out_of_sample():
+    """Scoring a calibrator on its own fitting data returns ~0 by construction.
+
+    Pure noise cannot be calibrated, so an honest score must NOT be near zero.
+    """
+    noise = RNG.uniform(0.05, 0.95, 3000)
+    coin = (RNG.uniform(0, 1, 3000) < 0.5).astype(int)
+    result = fit_calibrator(noise, coin)
+    assert result.ece_after > 0.005, (
+        "an ECE this low on unpredictable data means the calibrator was "
+        "scored on the points it was fitted to")
 
 
 def test_identity_calibrator_is_a_true_passthrough():
