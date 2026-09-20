@@ -1,5 +1,6 @@
 """Command-line interface.
 
+    nway check                       # is everything configured?
     nway init-db
     nway ingest --history --seasons 2017/18..2025/26
     nway ingest                      # live fixtures and results
@@ -137,6 +138,14 @@ def cmd_explain(args, config) -> int:
     return 0
 
 
+def cmd_check(args, config) -> int:
+    from nway.diagnostics import render, run_checks
+
+    checks = run_checks(config)
+    print(render(checks))
+    return 1 if any(c.status == "fail" for c in checks) else 0
+
+
 def cmd_demo(args, config) -> int:
     from nway.scheduling.demo import run_demo
 
@@ -245,6 +254,10 @@ def build_parser() -> argparse.ArgumentParser:
     explain = sub.add_parser("explain", help="why a prediction was made")
     explain.add_argument("--prediction-id", type=int, required=True)
     explain.set_defaults(func=cmd_explain)
+
+    sub.add_parser(
+        "check", help="verify credentials and data are set up correctly"
+    ).set_defaults(func=cmd_check)
 
     demo = sub.add_parser(
         "demo", help="replay a historical matchday end to end (no credentials needed)")

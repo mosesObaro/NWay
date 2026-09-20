@@ -21,6 +21,16 @@ HTTP client, email composition, timezone handling — is standard library.
 cp .env.example .env
 ```
 
+Then, at any point, ask the system whether it is configured correctly:
+
+```bash
+.venv/bin/nway check
+```
+
+It verifies each credential against the real API — it does not merely check
+that a variable is set — and prints where to get anything missing. It never
+prints a key, only whether it works.
+
 Two keys are needed for live operation. Neither is needed to run the tests or
 the demo.
 

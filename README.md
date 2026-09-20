@@ -102,6 +102,7 @@ is impossible by construction rather than by luck.
 ## Commands
 
 ```bash
+nway check                                # is everything configured?
 nway init-db                              # create the schema
 nway ingest --history --seasons 2017/18..2025/26
 nway ingest                               # live fixtures and results
