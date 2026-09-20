@@ -73,8 +73,17 @@ imports a provider, so nothing else changes.
 ```bash
 .venv/bin/nway init-db
 .venv/bin/nway ingest --history --seasons 2017/18..2025/26   # ~5 minutes
+.venv/bin/nway ingest --org-history --competitions champions_league
 .venv/bin/nway train --through 2026-06-30
 ```
+
+The second ingest is separate because the Champions League has no CSV source.
+Its results come from football-data.org — goals only, no shots or corners,
+which is all the goal model needs to fit a scoring rate and a home advantage.
+Skip it and the competition stays unfitted, and every UCL fixture is refused
+with `COMPETITION_NOT_FITTED` rather than being given league-average numbers.
+The free tier serves 2023/24 onward; earlier seasons return 403 and are skipped
+without error.
 
 The ingest is rate-limited to one file every five seconds out of politeness to
 a free source; 63 files take roughly five minutes. Expect ~21,500 matches.

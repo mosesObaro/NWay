@@ -110,3 +110,49 @@ def test_unfitted_competition_yields_identical_lambdas_for_every_fixture():
     second = model.predict_lambdas(3, 4, competition_id=99)
     assert first == second, "fixture identity leaked into an unfitted competition"
     assert model.is_fitted_for(99) is False
+
+
+# ------------------------------------------ historical backfill timestamps
+def test_backfilled_results_use_reconstructed_knowledge_times(db, config, monkeypatch):
+    """Backfill stamped with the fetch time is invisible to every past as-of.
+
+    A season loaded in 2026 and stamped "known in 2026" is excluded from every
+    as-of query before today, so the competition can never be trained on. This
+    is how the Champions League stayed unfitted despite 503 ingested results.
+    """
+    import datetime as dt
+
+    from nway import clock
+    from nway.entities.resolution import EntityResolver
+    from nway.features.context import AsOfRepository
+    from nway.ingestion.pipeline import _write_live_fixture
+    from nway.ingestion.providers.football_data_org import OrgFixture
+    from nway.storage import repositories as repo
+
+    kickoff = dt.datetime(2024, 3, 1, 20, 0, tzinfo=clock.UTC)
+    competition_id = repo.upsert_competition(
+        db, "cup", "Cup", "UEFA_CLUB", "LEAGUE_PHASE", None, True)
+
+    fixture = OrgFixture(
+        provider_id="1", competition_code="CL", season_label="2023/24",
+        season_start="2023-09-01", season_end="2024-06-01",
+        home_name="Alpha FC", away_name="Bravo FC",
+        home_provider_id="10", away_provider_id="11",
+        kickoff_utc=kickoff, status="FINISHED", matchday=1, stage="LEAGUE_PHASE",
+        home_goals=2, away_goals=1, ht_home_goals=1, ht_away_goals=0,
+        last_updated=None)
+
+    _write_live_fixture(db, EntityResolver(db), fixture, competition_id,
+                        None, historical=True)
+
+    stored = db.query_one("SELECT knowledge_time FROM match_result")
+    assert stored["knowledge_time"] == clock.to_iso(kickoff + dt.timedelta(hours=2))
+
+    # The decisive assertion: a model training a month later can see it.
+    later = kickoff + dt.timedelta(days=30)
+    visible = AsOfRepository(db, later).results_for_training([competition_id])
+    assert len(visible) == 1
+
+    # And a model training BEFORE the match still cannot.
+    earlier = kickoff - dt.timedelta(days=1)
+    assert AsOfRepository(db, earlier).results_for_training([competition_id]) == []

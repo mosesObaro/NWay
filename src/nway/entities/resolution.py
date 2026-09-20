@@ -204,6 +204,11 @@ _RAW_TEAM_ALIASES: dict[str, str] = {
     "sbv excelsior": "Excelsior",
     "paderborn 07": "Paderborn", "paderborn": "Paderborn",
     "sporting clube de braga": "Sporting Braga",
+    # Czech clubs sharing the "Praha" suffix fuzzy-match each other at 0.75,
+    # so the queue surfaced them rather than guessing. They are distinct clubs.
+    "sparta praha": "Sparta Prague", "ac sparta praha": "Sparta Prague",
+    "slavia praha": "Slavia Prague", "sk slavia praha": "Slavia Prague",
+    "viktoria plzen": "Viktoria Plzen",
     "chaves": "GD Chaves", "gd chaves": "GD Chaves",
     "aves": "Desportivo das Aves", "desportivo aves": "Desportivo das Aves",
     "feirense": "Feirense", "cd feirense": "Feirense",

@@ -113,16 +113,23 @@ competitions:
       # form is taken from all competitions -- in practice its domestic league,
       # which is where it plays almost every week and is genuinely informative.
       feature_scope: ALL_COMPETITIONS
+      # No CSV source exists for this competition, so its training history
+      # comes from football-data.org instead: goals only, no shots or corners,
+      # which is all the goal model needs to fit a scoring rate and a home
+      # advantage. Load it with:
+      #   nway ingest --org-history --competitions champions_league
+      history_source: football_data_org
+      history_seasons_available: 3       # free tier: 2023/24 onward; earlier 403s
       notes: >-
-        Fixtures and results only on the free tier. Ingested and monitored, but
-        NOT yet predictable: goal rate and home advantage are fitted per
-        competition and there is no Champions League training history, so every
-        fixture would receive the same league-average numbers. The pipeline
-        refuses these with COMPETITION_NOT_FITTED. It becomes predictable once
-        a season or two of results has accumulated -- the data arrives
-        automatically -- and then only for fixtures where both clubs play in
-        one of the seven configured leagues and therefore carry a rating,
-        measured at 44% of league-phase fixtures.
+        Predictable. Fitted on 313 Champions League matches; held-out 2025/26
+        scored log loss 0.9290 against a 1.0189 base rate, a +0.090 gain --
+        stronger than five of the seven domestic leagues, because the quality
+        spread in this competition is much wider. Fitting it separately matters:
+        it runs at a markedly higher home advantage (+0.264) than the Premier
+        League (+0.117), so pooling the domestic leagues would have been wrong.
+        Clubs from outside the seven configured leagues carry thin histories and
+        are filtered by the data-completeness and team-history gates; in
+        practice about 55 of 126 upcoming fixtures clear them.
 
     - slug: europa_league
       name: UEFA Europa League

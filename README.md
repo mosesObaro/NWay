@@ -59,19 +59,28 @@ before it — against each league's own base rate:
 | La Liga | 380 | 0.9856 | 1.0464 | **+0.061** | 0.066 |
 | Ligue 1 | 306 | 1.0074 | 1.0616 | +0.054 | 0.072 |
 | Premier League | 380 | 1.0369 | 1.0793 | +0.042 | 0.062 |
+| **Champions League** | 187 | **0.9290** | 1.0189 | **+0.090** | 0.074 |
 
-All seven beat their own baseline. The ordering is worth reading: the
-**Premier League is the hardest** of the seven, and the **Primeira Liga the
+All eight beat their own baseline. The ordering is worth reading: the
+**Premier League is the hardest** of them, and the **Primeira Liga the
 easiest** — a league with three dominant clubs and a long tail is far more
-predictable than the most scrutinised competition in the sport.
+predictable than the most scrutinised competition in the sport. The Champions
+League scores well for the same reason in reverse: an enormous quality spread,
+from Real Madrid to the qualifying-round entrants, makes team ratings highly
+informative.
 
-**The Champions League is ingested but not predicted.** Goal rate and home
-advantage are fitted per competition and there is no UCL training history yet,
-so every fixture would receive the same league-average numbers regardless of
-who is playing. The pipeline refuses these with `COMPETITION_NOT_FITTED`. It
-becomes predictable once a season or two of results accumulates — which happens
-automatically — and then only for the ~44% of league-phase fixtures where both
-clubs play in one of the seven leagues and therefore carry a rating.
+The Champions League has **no CSV source**, so its training history comes from
+football-data.org instead — goals only, which is all the goal model needs:
+
+```bash
+nway ingest --org-history --competitions champions_league
+```
+
+Fitting it separately rather than pooling the domestic leagues matters: it runs
+at a **home advantage of +0.264 against the Premier League's +0.117**. About 55
+of 126 upcoming fixtures clear the data gates; clubs from outside the seven
+configured leagues carry thin histories and are filtered out rather than
+guessed at.
 
 ## How it decides what to send
 

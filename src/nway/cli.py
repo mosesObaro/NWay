@@ -59,7 +59,14 @@ def cmd_ingest(args, config) -> int:
     from nway.ingestion.pipeline import ingest_history, ingest_live
 
     db = connect(args.database)
-    if args.history:
+    if args.org_history:
+        from nway.ingestion.pipeline import ingest_org_history
+
+        competitions = (args.competitions or "champions_league").split(",")
+        years = [int(y) for y in args.years.split(",")] if args.years else \
+            list(range(dt.date.today().year - 3, dt.date.today().year + 1))
+        summary = ingest_org_history(db, config, competitions, years)
+    elif args.history:
         seasons = _season_range(args.seasons)
         competitions = args.competitions.split(",") if args.competitions else None
         summary = ingest_history(db, config, seasons, competitions)
@@ -275,6 +282,11 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--seasons", default="2017/18..2025/26")
     ingest.add_argument("--competitions", default=None, help="comma-separated slugs")
     ingest.add_argument("--days", type=int, default=None, help="live discovery horizon")
+    ingest.add_argument("--org-history", action="store_true",
+                        help="load historical seasons from football-data.org "
+                             "(for competitions with no CSV source)")
+    ingest.add_argument("--years", default=None,
+                        help="comma-separated season start years, e.g. 2023,2024,2025")
     ingest.set_defaults(func=cmd_ingest)
 
     train = sub.add_parser("train", help="fit the goal model and calibrators")

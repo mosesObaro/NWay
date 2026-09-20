@@ -124,6 +124,10 @@ jobs:
         run: |
           nway init-db
           nway ingest --history --seasons 2017/18..2025/26
+          # The Champions League has no CSV source; its training history comes
+          # from football-data.org. Without this the competition is unfitted
+          # and every UCL fixture is refused.
+          nway ingest --org-history --competitions champions_league
           nway train --through "$(date -u +%Y-%m-%d)"
 
       # The ledger of what has already been emailed lives in the repository,

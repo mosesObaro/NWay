@@ -218,6 +218,60 @@ def _write_historical_match(db: Database, resolver: EntityResolver, match: couk.
     return created, has_stats
 
 
+def ingest_org_history(db: Database, config: Config, competitions: list[str],
+                       seasons: list[int]) -> IngestSummary:
+    """Load historical results for competitions that have no CSV source.
+
+    football-data.co.uk covers the seven domestic leagues and nothing else, so
+    the Champions League has no statistics history there. Its results are
+    available from football-data.org instead: goals only, no shots or corners,
+    which is all the goal model needs to fit a competition's scoring rate and
+    home advantage. Without them every fixture in the competition receives the
+    same league-average numbers.
+    """
+    client = http_mod.build_client(config, fdo.SOURCE, db=db)
+    resolver = EntityResolver(db)
+    summary = IngestSummary()
+
+    targets = [c for c in config.competitions
+               if c.slug in competitions and c.providers.get(fdo.SOURCE)]
+    for competition in targets:
+        code = competition.providers[fdo.SOURCE]
+        competition_id = repo.upsert_competition(
+            db, competition.slug, competition.name, competition.kind,
+            competition.structure, competition.country, competition.enabled)
+
+        for year in seasons:
+            try:
+                fixtures = fdo.fetch_competition_season(client, code, year)
+            except Exception as exc:  # noqa: BLE001
+                # A 403 means the season is beyond the plan's history, which is
+                # a limit rather than a failure.
+                log.info("season unavailable",
+                         context={"competition": competition.slug,
+                                  "season": year, "detail": str(exc)[:80]})
+                continue
+            if not fixtures:
+                continue
+
+            with db.transaction():
+                for fixture in fixtures:
+                    outcome = _write_live_fixture(
+                        db, resolver, fixture, competition_id,
+                        competition.country, historical=True)
+                    if outcome is None:
+                        summary.unresolved_names += 1
+                        continue
+                    created, wrote_result = outcome
+                    summary.fixtures_created += int(created)
+                    summary.fixtures_updated += int(not created)
+                    summary.results_written += int(wrote_result)
+            log.info("ingested season", context={
+                "competition": competition.slug, "season": year,
+                "matches": len(fixtures)})
+    return summary
+
+
 def ingest_live(db: Database, config: Config,
                 discovery_days: int | None = None) -> IngestSummary:
     """Refresh fixtures and results for every enabled competition."""
@@ -275,7 +329,8 @@ def ingest_live(db: Database, config: Config,
 
 
 def _write_live_fixture(db: Database, resolver: EntityResolver, fixture: fdo.OrgFixture,
-                        competition_id: int, country: str | None) -> tuple[bool, bool] | None:
+                        competition_id: int, country: str | None,
+                        historical: bool = False) -> tuple[bool, bool] | None:
     home_id = resolver.resolve_team(
         fdo.SOURCE, fixture.home_name, fixture.home_provider_id, country)
     away_id = resolver.resolve_team(
@@ -291,9 +346,21 @@ def _write_live_fixture(db: Database, resolver: EntityResolver, fixture: fdo.Org
 
     # knowledge_time is when WE learned it: the fetch time, but never earlier
     # than the provider's own lastUpdated.
-    knowledge = clock.now()
-    if fixture.last_updated and fixture.last_updated > knowledge:
-        knowledge = fixture.last_updated
+    #
+    # Backfilled seasons are different. Stamping them with the fetch time says
+    # a 2024 result only became knowable in 2026, so every as-of query before
+    # today excludes them and the competition can never be trained on -- which
+    # is exactly what happened the first time this ran. Historical rows get the
+    # reconstructed times BACKTESTING.md specifies: a result is knowable two
+    # hours after kickoff, a fixture list a month before it.
+    if historical:
+        knowledge = fixture.kickoff_utc - dt.timedelta(days=30)
+        result_knowledge = fixture.kickoff_utc + dt.timedelta(hours=2)
+    else:
+        knowledge = clock.now()
+        if fixture.last_updated and fixture.last_updated > knowledge:
+            knowledge = fixture.last_updated
+        result_knowledge = knowledge
 
     fixture_id, changes = repo.upsert_fixture(
         db, competition_id=competition_id, season_id=season_id,
@@ -324,6 +391,6 @@ def _write_live_fixture(db: Database, resolver: EntityResolver, fixture: fdo.Org
             (fixture_id, fixture.home_goals, fixture.away_goals,
              fixture.ht_home_goals, fixture.ht_away_goals, outcome, fdo.SOURCE,
              clock.to_iso(fixture.kickoff_utc + dt.timedelta(hours=2)),
-             clock.to_iso(knowledge)))
+             clock.to_iso(result_knowledge)))
         wrote_result = True
     return created, wrote_result

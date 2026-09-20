@@ -143,6 +143,28 @@ def fetch_competition_matches(client, competition_code: str,
     return fixtures
 
 
+def fetch_competition_season(client, competition_code: str,
+                             season_start_year: int) -> list[OrgFixture]:
+    """Fetch one historical season.
+
+    The free tier serves only the last few seasons -- verified 2026-09-20:
+    Champions League 2023/24 onward works, 2022/23 and earlier return 403. The
+    caller treats a 403 as "no more history available", not as an error.
+    """
+    url = f"{BASE_URL}/competitions/{competition_code}/matches"
+    response = client.get(url, headers=auth_headers(),
+                          params={"season": season_start_year},
+                          allow_conditional=False)
+    if not response.body:
+        return []
+    fixtures = []
+    for match in response.json().get("matches", []) or []:
+        parsed = _parse_match(match, competition_code)
+        if parsed and parsed.home_name and parsed.away_name:
+            fixtures.append(parsed)
+    return fixtures
+
+
 def fetch_competitions(client) -> list[dict[str, Any]]:
     """The competition list is readable without a token; useful for diagnostics."""
     response = client.get(f"{BASE_URL}/competitions", headers=auth_headers())
