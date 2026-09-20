@@ -126,3 +126,48 @@ def test_rate_limit_is_retried_before_being_reported(monkeypatch):
     payload, remaining = diagnostics._fetch_with_backoff(object())
     assert calls["n"] == 2
     assert remaining == "9"
+
+
+def test_restricted_key_is_recognised_as_valid_not_rejected(monkeypatch):
+    """A sending-access key cannot read /domains and returns 401 there.
+
+    That is the correct, narrowest key for this system, so reporting it as a
+    failure would push the user toward a broader key than they need.
+    """
+    import io
+    import urllib.error
+
+    from nway import diagnostics
+    from nway.diagnostics import OK
+
+    monkeypatch.setenv("NWAY_RESEND_API_KEY", "re_sendingkey123")
+
+    def restricted(*_args, **_kwargs):
+        raise urllib.error.HTTPError(
+            "url", 401, "Unauthorized", {},
+            io.BytesIO(b'{"name":"restricted_api_key","message":"This API key '
+                       b'is restricted to only send emails"}'))
+
+    monkeypatch.setattr(diagnostics.urllib.request, "urlopen", restricted)
+    check = diagnostics.check_resend()
+    assert check.status == OK
+    assert "sending only" in check.detail
+
+
+def test_cloudflare_block_is_not_reported_as_a_bad_key(monkeypatch):
+    import io
+    import urllib.error
+
+    from nway import diagnostics
+    from nway.diagnostics import WARN
+
+    monkeypatch.setenv("NWAY_RESEND_API_KEY", "re_anykey123")
+
+    def blocked(*_args, **_kwargs):
+        raise urllib.error.HTTPError(
+            "url", 403, "Forbidden", {}, io.BytesIO(b"error code: 1010\n"))
+
+    monkeypatch.setattr(diagnostics.urllib.request, "urlopen", blocked)
+    check = diagnostics.check_resend()
+    assert check.status == WARN
+    assert "Cloudflare" in check.detail

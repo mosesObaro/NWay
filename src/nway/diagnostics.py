@@ -21,6 +21,9 @@ from pathlib import Path
 from nway.config import PROJECT_ROOT, Config
 
 OK, WARN, FAIL = "ok", "warn", "fail"
+
+# Resend is behind Cloudflare, which 403s the default urllib signature.
+RESEND_USER_AGENT = "NWay/0.1 (+https://github.com/mosesObaro/NWay)"
 MARK = {OK: "\033[32m✓\033[0m", WARN: "\033[33m!\033[0m", FAIL: "\033[31m✗\033[0m"}
 
 
@@ -152,7 +155,9 @@ def check_resend() -> Check:
                      "create one at https://resend.com/api-keys")
     request = urllib.request.Request(
         "https://api.resend.com/domains",
-        headers={"Authorization": f"Bearer {key}"})
+        headers={"Authorization": f"Bearer {key}",
+                 "User-Agent": RESEND_USER_AGENT,
+                 "Accept": "application/json"})
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             payload = json.loads(response.read().decode() or "{}")
@@ -168,18 +173,32 @@ def check_resend() -> Check:
             "only onboarding@resend.dev as sender and delivers only to your "
             "own Resend account address")
     except urllib.error.HTTPError as exc:
-        if exc.code == 401:
-            return Check("Resend API key", FAIL, "rejected — the key is not valid",
-                         "check it starts with re_ and was copied whole, "
-                         "or issue a new one at https://resend.com/api-keys")
-        if exc.code == 403:
-            # Sending-access keys cannot list domains. That is the right key.
+        detail = ""
+        try:
+            detail = exc.read().decode()[:300]
+        except Exception:  # noqa: BLE001
+            pass
+        if "error code: 1010" in detail:
+            # Cloudflare blocked us before Resend saw the request. This says
+            # nothing about the key, and reads like an auth failure if not
+            # named.
+            return Check("Resend API key", WARN,
+                         "blocked by Cloudflare (1010) before reaching Resend",
+                         "this is a client bug, not your key — please report it")
+        if "restricted_api_key" in detail:
+            # A sending-access key legitimately cannot read /domains. That is
+            # the correct, narrowest key for this system.
             return Check(
                 "Resend API key", OK,
                 "valid, scoped to sending only (the correct, narrowest key) — "
                 "domain status cannot be read with this key",
                 "confirm delivery with: nway check --send-test")
-        return Check("Resend API key", WARN, f"HTTP {exc.code}", None)
+        if exc.code in (401, 403):
+            return Check("Resend API key", FAIL,
+                         f"rejected — {detail or f'HTTP {exc.code}'}",
+                         "check it starts with re_ and was copied whole, "
+                         "or issue a new one at https://resend.com/api-keys")
+        return Check("Resend API key", WARN, f"HTTP {exc.code}: {detail}", None)
     except Exception as exc:  # noqa: BLE001
         return Check("Resend API key", WARN, f"could not reach Resend: {exc}", None)
 
@@ -209,7 +228,11 @@ def send_test_email(config: Config) -> Check:
 
     error = result.error or "unknown error"
     fix = None
-    if "403" in error or "domain" in error.lower():
+    if "Cloudflare" in error:
+        fix = "a client bug, not your configuration — please report it"
+    elif "not_found" in error or "validation_error" in error:
+        fix = "check NWAY_EMAIL_FROM is a sender Resend accepts"
+    elif "403" in error or "domain" in error.lower():
         fix = ("Resend rejects this sender/recipient pair until you verify a "
                "domain. Use NWAY_EMAIL_FROM='NWay <onboarding@resend.dev>' and "
                "set NWAY_EMAIL_TO to your own Resend account address.")

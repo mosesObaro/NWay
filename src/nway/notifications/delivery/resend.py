@@ -27,6 +27,12 @@ log = get_logger(__name__)
 
 API_URL = "https://api.resend.com/emails"
 
+# Resend sits behind Cloudflare, which blocks the default urllib signature with
+# HTTP 403 "error code: 1010" -- a bot block, not a Resend rejection, and one
+# that reads like an authentication failure. Every request must identify
+# itself.
+USER_AGENT = "NWay/0.1 (+https://github.com/mosesObaro/NWay)"
+
 
 class ResendProvider:
     name = "resend"
@@ -58,6 +64,8 @@ class ResendProvider:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json",
         }
         # Resend honours an idempotency key, which is a second line of defence
         # behind our own ledger: a retry after an ambiguous timeout cannot
@@ -87,6 +95,13 @@ class ResendProvider:
                 except Exception:  # noqa: BLE001
                     pass
                 last_status, last_error = exc.code, f"HTTP {exc.code}: {detail}"
+                if "error code: 1010" in detail:
+                    # Cloudflare, not Resend. Retrying identically cannot help.
+                    last_error = ("blocked by Cloudflare (error 1010) before "
+                                  "reaching Resend — the request was missing a "
+                                  "User-Agent header")
+                    return DeliveryResult(False, self.name, error=last_error,
+                                          attempt=attempt, status_code=exc.code)
                 # A 4xx other than rate limiting will not succeed on a retry.
                 if exc.code < 500 and exc.code != 429:
                     log.error("resend rejected the message", context={
