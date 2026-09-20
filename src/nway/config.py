@@ -68,6 +68,9 @@ class Competition:
     # per-team and share nothing across scopes, so a men's club model cannot
     # predict national teams or women's clubs however the data arrives.
     model_scope: str = "mens_club"
+    # SAME_COMPETITION for leagues; ALL_COMPETITIONS for cup competitions,
+    # which have too little history of their own to form a window from.
+    feature_scope: str = "SAME_COMPETITION"
     group: str = "domestic"
 
     @property
@@ -188,6 +191,7 @@ def load_config(config_dir: Path | None = None) -> Config:
                 teams=entry.get("teams"),
                 blocked_reason=entry.get("blocked_reason"),
                 model_scope=entry.get("model_scope", "mens_club"),
+                feature_scope=entry.get("feature_scope", "SAME_COMPETITION"),
                 group=group,
             ))
 

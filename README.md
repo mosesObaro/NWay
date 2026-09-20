@@ -45,6 +45,34 @@ The backtest also simulates the notification rules: over that season it would
 have sent **61 batches**, stayed silent for **22 windows** with too few
 qualifying predictions, and found **19 windows with no fixtures at all**.
 
+## Which competitions it can actually predict
+
+Measured on the held-out 2025/26 season — the model's training window ended
+before it — against each league's own base rate:
+
+| League | n | Log loss | Its base rate | Gain | Over 1.5 ECE |
+|---|---|---|---|---|---|
+| Primeira Liga | 306 | 0.9257 | 1.0834 | **+0.158** | 0.039 |
+| Bundesliga | 306 | 0.9783 | 1.0704 | **+0.092** | 0.079 |
+| Eredivisie | 306 | 0.9882 | 1.0711 | **+0.083** | 0.062 |
+| Serie A | 380 | 1.0082 | 1.0851 | **+0.077** | 0.091 |
+| La Liga | 380 | 0.9856 | 1.0464 | **+0.061** | 0.066 |
+| Ligue 1 | 306 | 1.0074 | 1.0616 | +0.054 | 0.072 |
+| Premier League | 380 | 1.0369 | 1.0793 | +0.042 | 0.062 |
+
+All seven beat their own baseline. The ordering is worth reading: the
+**Premier League is the hardest** of the seven, and the **Primeira Liga the
+easiest** — a league with three dominant clubs and a long tail is far more
+predictable than the most scrutinised competition in the sport.
+
+**The Champions League is ingested but not predicted.** Goal rate and home
+advantage are fitted per competition and there is no UCL training history yet,
+so every fixture would receive the same league-average numbers regardless of
+who is playing. The pipeline refuses these with `COMPETITION_NOT_FITTED`. It
+becomes predictable once a season or two of results accumulates — which happens
+automatically — and then only for the ~44% of league-phase fixtures where both
+clubs play in one of the seven leagues and therefore carry a rating.
+
 ## How it decides what to send
 
 Most ticks send nothing. Measured on the 2024/25 calendar, a rolling 72-hour

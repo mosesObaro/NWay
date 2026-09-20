@@ -107,7 +107,22 @@ competitions:
       providers:
         football_data_org: CL            # Champions, not Conference
       stats_history_from: null           # no free per-match statistics
-      notes: Fixtures and results only on the free tier.
+      # A UEFA competition has no form history of its own: the league phase is
+      # eight matches a season and the season has only just begun. Scoping form
+      # features to the competition leaves every one of them NULL, so a team's
+      # form is taken from all competitions -- in practice its domestic league,
+      # which is where it plays almost every week and is genuinely informative.
+      feature_scope: ALL_COMPETITIONS
+      notes: >-
+        Fixtures and results only on the free tier. Ingested and monitored, but
+        NOT yet predictable: goal rate and home advantage are fitted per
+        competition and there is no Champions League training history, so every
+        fixture would receive the same league-average numbers. The pipeline
+        refuses these with COMPETITION_NOT_FITTED. It becomes predictable once
+        a season or two of results has accumulated -- the data arrives
+        automatically -- and then only for fixtures where both clubs play in
+        one of the seven configured leagues and therefore carry a rating,
+        measured at 44% of league-phase fixtures.
 
     - slug: europa_league
       name: UEFA Europa League
@@ -116,6 +131,7 @@ competitions:
       enabled: false                     # blocked: football-data.org TIER_TWO (paid)
       providers:
         football_data_org: EL
+      feature_scope: ALL_COMPETITIONS
       blocked_reason: >-
         Requires a paid plan on every free source checked on 2026-09-20.
         See docs/DATA_SOURCES.md section 7.
@@ -127,6 +143,7 @@ competitions:
       enabled: false                     # blocked: football-data.org TIER_FOUR (paid)
       providers:
         football_data_org: UCL           # yes, UCL means CONFERENCE here
+      feature_scope: ALL_COMPETITIONS
       blocked_reason: >-
         Requires a higher paid tier than the Europa League.
         See docs/DATA_SOURCES.md section 7.

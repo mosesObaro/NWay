@@ -48,8 +48,23 @@ def _team_statistic(ctx: FeatureContext, spec: FeatureSpec,
                     team_id: int) -> tuple[float | None, str | None]:
     limit = spec.window.size if spec.window.kind == "MATCHES" else None
     season_id = ctx.fixture.get("season_id") if spec.window.kind == "SEASON" else None
+
+    # The competition itself may override the spec: a cup with eight matches a
+    # season cannot supply a ten-match window, so its form comes from wherever
+    # the team actually plays.
+    scope = spec.competition_scope
+    slug = ctx.fixture.get("competition_slug")
+    if slug and ctx.config is not None:
+        try:
+            scope = ctx.config.competition(slug).feature_scope
+        except (KeyError, AttributeError):
+            pass
     competition_id = (ctx.fixture.get("competition_id")
-                      if spec.competition_scope == "SAME_COMPETITION" else None)
+                      if scope == "SAME_COMPETITION" else None)
+    if competition_id is None:
+        # Season-to-date across all competitions is not a meaningful window;
+        # fall back to the team's recent matches wherever they were played.
+        season_id = None
 
     matches = ctx.repo.team_matches(
         team_id, competition_id=competition_id, season_id=season_id,
@@ -133,8 +148,17 @@ def _match_feature(ctx: FeatureContext, spec: FeatureSpec) -> tuple[float | None
 
     if statistic in ("home_history_matches", "away_history_matches"):
         team_id = ctx.home_team_id if statistic.startswith("home") else ctx.away_team_id
+        scope = "SAME_COMPETITION"
+        slug = ctx.fixture.get("competition_slug")
+        if slug and ctx.config is not None:
+            try:
+                scope = ctx.config.competition(slug).feature_scope
+            except (KeyError, AttributeError):
+                pass
+        competition_id = (ctx.fixture.get("competition_id")
+                          if scope == "SAME_COMPETITION" else None)
         matches = ctx.repo.team_matches(
-            team_id, competition_id=ctx.fixture.get("competition_id"), before=kickoff)
+            team_id, competition_id=competition_id, before=kickoff)
         return float(len(matches)), None
 
     if statistic in ("league_home_goals", "league_away_goals"):

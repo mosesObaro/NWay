@@ -136,6 +136,34 @@ class PredictionPipeline:
                 data_completeness, staleness,
                 skipped_reason="INSUFFICIENT_DATA_COMPLETENESS")
 
+        # A competition the model was never fitted on has no goal rate and no
+        # home advantage of its own, so every fixture in it would receive the
+        # same league-average pair -- identical probabilities for Roma v Real
+        # Madrid and Feyenoord v Como. Refuse rather than emit that.
+        if hasattr(self.model, "is_fitted_for") and \
+                not self.model.is_fitted_for(fixture["competition_id"]):
+            log.info("skipped fixture: competition not in training data",
+                     context={"fixture_id": fixture["fixture_id"],
+                              "competition": fixture.get("competition_slug")})
+            return PredictionResult(
+                fixture["fixture_id"], None, 0.0, 0.0, {}, {},
+                data_completeness, staleness,
+                skipped_reason="COMPETITION_NOT_FITTED")
+
+        # Without a rating a team receives the competition average, which
+        # looks like a prediction and is not one. Cup competitions draw on
+        # clubs from outside the configured leagues.
+        ratings = getattr(self.model.params, "attack", {})
+        unrated = [side for side, key in (("home", "home_team_id"),
+                                          ("away", "away_team_id"))
+                   if ratings and fixture[key] not in ratings]
+        if unrated:
+            log.info("skipped fixture: unrated team", context={
+                "fixture_id": fixture["fixture_id"], "sides": unrated})
+            return PredictionResult(
+                fixture["fixture_id"], None, 0.0, 0.0, {}, {},
+                data_completeness, staleness, skipped_reason="UNRATED_TEAM")
+
         lam_home, lam_away = self.model.predict_lambdas(
             fixture["home_team_id"], fixture["away_team_id"],
             fixture["competition_id"])

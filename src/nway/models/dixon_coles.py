@@ -190,14 +190,25 @@ class DixonColesModel:
         return self
 
     # -- prediction ------------------------------------------------------
+    def is_fitted_for(self, competition_id: int) -> bool:
+        """Was this competition present in the training data?
+
+        Goal rate and home advantage are fitted per competition, so a
+        competition the model never saw has neither. Without this check
+        predict_lambdas silently returns the same league-average pair for
+        every fixture in it -- identical probabilities for Roma v Real Madrid
+        and Feyenoord v Como, which looks like a prediction and is not one.
+        """
+        return competition_id in self.params.intercept
+
     def predict_lambdas(self, home_team_id: int, away_team_id: int,
                         competition_id: int) -> tuple[float, float]:
         params = self.params
         default_home, default_away = params.league_defaults.get(
             competition_id, (1.55, 1.26))
         if competition_id not in params.intercept:
-            # Unseen competition: fall back to its measured average rather than
-            # pretending a rating exists.
+            # Callers should gate on is_fitted_for; this remains only so the
+            # function is total, and returns an explicitly average pair.
             return default_home, default_away
 
         intercept = params.intercept[competition_id]

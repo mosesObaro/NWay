@@ -82,3 +82,31 @@ def test_registry_reads_every_group_not_a_fixed_pair(config):
     """Adding a category of competition must be a configuration change."""
     groups = {c.group for c in config.competitions}
     assert {"domestic", "uefa", "uefa_women", "international"} <= groups
+
+
+# ------------------------------------------------- unfitted competitions
+def test_model_reports_which_competitions_it_was_fitted_on():
+    from nway.models.dixon_coles import DixonColesModel
+
+    model = DixonColesModel()
+    model.params.intercept[1] = 0.3
+    assert model.is_fitted_for(1) is True
+    assert model.is_fitted_for(99) is False
+
+
+def test_unfitted_competition_yields_identical_lambdas_for_every_fixture():
+    """The reason the gate exists, asserted directly.
+
+    Without a fitted intercept the model returns one league-average pair
+    regardless of who is playing -- so Roma v Real Madrid and Feyenoord v Como
+    come out identical. That is not a prediction.
+    """
+    from nway.models.dixon_coles import DixonColesModel
+
+    model = DixonColesModel()
+    model.params.attack.update({1: 0.6, 2: -0.4, 3: 0.1, 4: 0.2})
+    model.params.defence.update({1: -0.3, 2: 0.5, 3: 0.0, 4: -0.1})
+    first = model.predict_lambdas(1, 2, competition_id=99)
+    second = model.predict_lambdas(3, 4, competition_id=99)
+    assert first == second, "fixture identity leaked into an unfitted competition"
+    assert model.is_fitted_for(99) is False
