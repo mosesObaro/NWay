@@ -11,7 +11,7 @@ it). A prediction made at ``as_of`` may read a row only when
 and it cannot be retrofitted, so it is here from the first migration.
 """
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 DDL = """
 PRAGMA journal_mode = WAL;
@@ -368,6 +368,21 @@ CREATE TABLE IF NOT EXISTS notified_selection (
     PRIMARY KEY (fixture_id, market_key, selection, batch_id)
 );
 CREATE INDEX IF NOT EXISTS ix_notified_recent ON notified_selection (fixture_id, sent_at);
+
+-- The same ledger, without foreign keys, so it can be restored from the
+-- committed state file after the database has been rebuilt from scratch. The
+-- foreign keys on notified_selection are correct for live operation and are
+-- exactly what makes it unrestorable: the fixtures and predictions it points
+-- at no longer exist by the same ids. Duplicate suppression reads both.
+CREATE TABLE IF NOT EXISTS notified_ledger (
+    fixture_id       INTEGER NOT NULL,
+    market_key       TEXT    NOT NULL,
+    selection        TEXT    NOT NULL,
+    probability_sent REAL    NOT NULL,
+    sent_at          TEXT    NOT NULL,
+    PRIMARY KEY (fixture_id, market_key, selection, sent_at)
+);
+CREATE INDEX IF NOT EXISTS ix_ledger_recent ON notified_ledger (fixture_id, sent_at);
 
 -- --------------------------------------------- validation and evaluation
 CREATE TABLE IF NOT EXISTS market_outcome (

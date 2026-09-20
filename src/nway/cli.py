@@ -1,6 +1,7 @@
 """Command-line interface.
 
     nway check                       # is everything configured?
+    nway schedule --write-state      # when should the next run be?
     nway init-db
     nway ingest --history --seasons 2017/18..2025/26
     nway ingest                      # live fixtures and results
@@ -138,6 +139,57 @@ def cmd_explain(args, config) -> int:
     return 0
 
 
+def cmd_schedule(args, config) -> int:
+    """Compute and record when the next run should happen."""
+    import os
+
+    from nway.scheduling.autoschedule import (
+        STATE_PATH, decide_next_run, export_state, import_state, is_due,
+    )
+
+    db = connect(args.database)
+    if args.restore:
+        restored = import_state(db, args.state)
+        print(f"restored {restored} ledger entries")
+        return 0
+
+    if args.gate:
+        due, reason = is_due(path=args.state)
+        print(reason)
+        _github_output({"due": "true" if due else "false", "reason": reason})
+        return 0
+
+    decision = decide_next_run(db, config, now=_parse_moment(args.as_of))
+    if args.write_state:
+        export_state(db, decision, args.state)
+
+    print(json.dumps(decision.to_dict(), indent=2))
+    _github_output({
+        "next_run_at": decision.next_run_at,
+        "reason": decision.reason,
+        "code": decision.code,
+        "sleep_hours": str(decision.sleep_hours),
+        "fixtures_in_window": str(decision.fixtures_in_window),
+        "cron": "\n".join(decision.cron),
+    })
+    return 0
+
+
+def _github_output(values: dict[str, str]) -> None:
+    """Expose values as GitHub Actions step outputs when running in CI."""
+    import os
+
+    path = os.environ.get("GITHUB_OUTPUT")
+    if not path:
+        return
+    with open(path, "a", encoding="utf-8") as handle:
+        for key, value in values.items():
+            if "\n" in value:
+                handle.write(f"{key}<<__NWAY_EOF__\n{value}\n__NWAY_EOF__\n")
+            else:
+                handle.write(f"{key}={value}\n")
+
+
 def cmd_check(args, config) -> int:
     from nway.diagnostics import render, run_checks
 
@@ -254,6 +306,18 @@ def build_parser() -> argparse.ArgumentParser:
     explain = sub.add_parser("explain", help="why a prediction was made")
     explain.add_argument("--prediction-id", type=int, required=True)
     explain.set_defaults(func=cmd_explain)
+
+    schedule = sub.add_parser(
+        "schedule", help="compute when the next run should happen")
+    schedule.add_argument("--write-state", action="store_true",
+                          help="persist the decision and the notified ledger")
+    schedule.add_argument("--restore", action="store_true",
+                          help="restore the ledger from the state file")
+    schedule.add_argument("--gate", action="store_true",
+                          help="print whether a run is due right now")
+    schedule.add_argument("--state", default=None, help="path to the state file")
+    schedule.add_argument("--as-of", default=None)
+    schedule.set_defaults(func=cmd_schedule)
 
     check = sub.add_parser(
         "check", help="verify credentials and data are set up correctly")

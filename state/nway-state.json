@@ -1,0 +1,18 @@
+{
+  "notified": [],
+  "recent_batches": [],
+  "schedule": {
+    "code": "WAITING_FOR_FIXTURES",
+    "cron": [
+      "*/15 20-22 21 9 *",
+      "17 6 * * *"
+    ],
+    "fixtures_in_window": 0,
+    "next_kickoff": "2026-10-09T17:45:00Z",
+    "next_run_at": "2026-09-21T21:23:30Z",
+    "reason": "no fixtures within 72h; next kickoff 2026-10-09 (19 days away), enters the window 2026-10-06T17:45:00Z",
+    "sleep_hours": 24.0
+  },
+  "updated_at": "2026-09-20T21:23:30Z",
+  "version": 1
+}

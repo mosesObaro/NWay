@@ -1,0 +1,192 @@
+name: Predict
+
+# Self-scheduling. Each run computes when the next one should happen -- from
+# real fixture timestamps, not a fixed interval -- writes that to
+# state/nway-state.json, and rewrites the cron block below to match.
+#
+# During an international break the next kickoff can be three weeks out, so the
+# loop settles to one cheap run a day. On a matchday it tightens to every
+# fifteen minutes around the send window.
+#
+# The block between the markers is machine-written. Edit the safety net if you
+# must, but leave the markers in place.
+
+on:
+  schedule:
+    # >>> nway:dynamic-schedule
+    - cron: "17 6 * * *"
+    # <<< nway:dynamic-schedule
+  workflow_dispatch:
+    inputs:
+      force_tick:
+        description: "Run the tick even if the schedule says it is not due"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Decide and report, but send no email"
+        type: boolean
+        default: false
+
+# A run rewrites shared state, so two must never overlap. Queued rather than
+# cancelled: a cancelled run would leave the schedule un-advanced.
+concurrency:
+  group: nway-predict
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  NWAY_FOOTBALL_DATA_ORG_TOKEN: ${{ secrets.NWAY_FOOTBALL_DATA_ORG_TOKEN }}
+  NWAY_RESEND_API_KEY: ${{ secrets.NWAY_RESEND_API_KEY }}
+  NWAY_EMAIL_FROM: ${{ secrets.NWAY_EMAIL_FROM }}
+  NWAY_EMAIL_TO: ${{ secrets.NWAY_EMAIL_TO }}
+  NWAY_CONTACT_EMAIL: ${{ secrets.NWAY_CONTACT_EMAIL }}
+  NWAY_DATABASE_URL: sqlite:///data/nway.db
+  NWAY_LOG_LEVEL: INFO
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet -r requirements.txt
+          python -m pip install --quiet -e .
+
+      # Without credentials the tick can only fail. Skip it explicitly and say
+      # so, rather than letting every scheduled run turn the repository red.
+      - name: Check secrets
+        id: secrets
+        run: |
+          missing=""
+          [ -z "$NWAY_FOOTBALL_DATA_ORG_TOKEN" ] && missing="$missing NWAY_FOOTBALL_DATA_ORG_TOKEN"
+          [ -z "$NWAY_RESEND_API_KEY" ]         && missing="$missing NWAY_RESEND_API_KEY"
+          [ -z "$NWAY_EMAIL_FROM" ]             && missing="$missing NWAY_EMAIL_FROM"
+          [ -z "$NWAY_EMAIL_TO" ]               && missing="$missing NWAY_EMAIL_TO"
+          if [ -n "$missing" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Secrets not configured"
+              echo "Missing:$missing"
+              echo ""
+              echo "Add them under Settings -> Secrets and variables -> Actions."
+              echo "The workflow will keep skipping until they are set."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Is this run due at all? A run that is not due stops here, in seconds,
+      # which is what makes a coarse safety-net cron affordable.
+      - name: Schedule gate
+        id: gate
+        if: steps.secrets.outputs.configured == 'true'
+        run: nway schedule --gate
+
+      - name: Not due
+        if: steps.secrets.outputs.configured == 'true' && steps.gate.outputs.due != 'true' && inputs.force_tick != true
+        run: |
+          echo "### Not due yet" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.gate.outputs.reason }}" >> "$GITHUB_STEP_SUMMARY"
+
+      # 13 MB of database plus model artefacts. Restored when present, rebuilt
+      # when not -- the rebuild costs about six minutes, which is why the cache
+      # matters, but nothing is lost if it is evicted.
+      - name: Restore data
+        if: steps.secrets.outputs.configured == 'true' && (steps.gate.outputs.due == 'true' || inputs.force_tick == true)
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            data/nway.db
+            data/models
+            data/calibrators
+          key: nway-data-v2-${{ github.run_id }}
+          restore-keys: |
+            nway-data-v2-
+
+      - name: Build history and train (only on a cache miss)
+        if: |
+          steps.secrets.outputs.configured == 'true' &&
+          (steps.gate.outputs.due == 'true' || inputs.force_tick == true) &&
+          steps.cache.outputs.cache-matched-key == ''
+        run: |
+          nway init-db
+          nway ingest --history --seasons 2017/18..2025/26
+          nway train --through "$(date -u +%Y-%m-%d)"
+
+      # The ledger of what has already been emailed lives in the repository,
+      # not the cache. An evicted cache then costs a rebuild rather than a
+      # duplicate email.
+      - name: Restore notification ledger
+        if: steps.secrets.outputs.configured == 'true' && (steps.gate.outputs.due == 'true' || inputs.force_tick == true)
+        run: nway schedule --restore
+
+      - name: Ingest live fixtures and results
+        if: steps.secrets.outputs.configured == 'true' && (steps.gate.outputs.due == 'true' || inputs.force_tick == true)
+        run: nway ingest
+
+      - name: Tick
+        id: tick
+        if: steps.secrets.outputs.configured == 'true' && (steps.gate.outputs.due == 'true' || inputs.force_tick == true)
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            nway tick --dry-run --skip-ingest | tee tick.out
+          else
+            nway tick --skip-ingest | tee tick.out
+          fi
+          {
+            echo "### Tick"
+            echo '```'
+            cat tick.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Compute the next wake time and persist it with the ledger. This runs
+      # even if the tick failed, so a transient error cannot strand the loop.
+      - name: Decide the next run
+        id: next
+        if: always() && steps.secrets.outputs.configured == 'true' && (steps.gate.outputs.due == 'true' || inputs.force_tick == true)
+        run: |
+          nway schedule --write-state | tee schedule.out
+          {
+            echo "### Next run"
+            echo '```'
+            cat schedule.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Rewrite the cron schedule
+        if: always() && steps.next.outcome == 'success' && github.ref == 'refs/heads/main'
+        run: |
+          while IFS= read -r line; do
+            [ -n "$line" ] && set -- "$@" "$line"
+          done <<< "${{ steps.next.outputs.cron }}"
+          python .github/scripts/rewrite_cron.py .github/workflows/predict.yml "$@"
+
+      - name: Commit state
+        if: always() && steps.next.outcome == 'success' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name  "nway-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/nway-state.json .github/workflows/predict.yml
+          if git diff --cached --quiet; then
+            echo "no state change"
+          else
+            git commit -m "chore: next run ${{ steps.next.outputs.next_run_at }} (${{ steps.next.outputs.code }})"
+            # Another run may have pushed while this one worked; rebase rather
+            # than clobber, and never force.
+            git pull --rebase --autostash origin main
+            git push origin HEAD:main
+          fi

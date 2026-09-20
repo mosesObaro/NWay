@@ -53,9 +53,16 @@ def load_previous_batches(db: Database, limit: int = 20) -> list[PreviousBatch]:
 
 
 def load_notified(db: Database, since: dt.datetime) -> list[NotifiedSelection]:
+    """Everything already sent, from both the live table and the restored
+    ledger -- otherwise a rebuilt database would re-send what a previous run
+    already emailed."""
     rows = db.query(
         "SELECT fixture_id, market_key, selection, probability_sent, sent_at "
-        "FROM notified_selection WHERE sent_at >= ?", (clock.to_iso(since),))
+        "FROM notified_selection WHERE sent_at >= ? "
+        "UNION "
+        "SELECT fixture_id, market_key, selection, probability_sent, sent_at "
+        "FROM notified_ledger WHERE sent_at >= ?",
+        (clock.to_iso(since), clock.to_iso(since)))
     return [NotifiedSelection(
         fixture_id=row["fixture_id"], market_key=row["market_key"],
         selection=row["selection"], probability_sent=row["probability_sent"],

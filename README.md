@@ -103,6 +103,7 @@ is impossible by construction rather than by luck.
 
 ```bash
 nway check                                # is everything configured?
+nway schedule --write-state               # when should the next run be?
 nway init-db                              # create the schema
 nway ingest --history --seasons 2017/18..2025/26
 nway ingest                               # live fixtures and results
@@ -136,6 +137,7 @@ query may filter on `matchday`.
 | Document | Contents |
 |---|---|
 | [SETUP.md](docs/SETUP.md) | Installation, credentials, scheduling |
+| [AUTOMATION.md](docs/AUTOMATION.md) | The self-scheduling GitHub Actions workflow |
 | [SYSTEM_DESIGN.md](docs/SYSTEM_DESIGN.md) | Architecture, components, principles |
 | [DATA_SOURCES.md](docs/DATA_SOURCES.md) | Source-by-source assessment with measured coverage and licensing |
 | [DATA_MODEL.md](docs/DATA_MODEL.md) | Bitemporal schema and entity resolution |
