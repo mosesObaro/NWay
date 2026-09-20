@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -37,6 +38,29 @@ def _is_set(name: str) -> str | None:
     if not value or value.upper().startswith("TODO"):
         return None
     return value
+
+
+def _fetch_with_backoff(request, attempts: int = 3) -> tuple[dict, str | None]:
+    """GET with one retry through a rate limit.
+
+    A 429 during setup is almost always transient -- the free tier's window is
+    a single minute -- so absorbing it here saves the reader from a scary
+    warning that resolves itself.
+    """
+    last: urllib.error.HTTPError | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                return (json.loads(response.read().decode()),
+                        response.headers.get("X-Requests-Available"))
+        except urllib.error.HTTPError as exc:
+            if exc.code != 429 or attempt == attempts:
+                raise
+            last = exc
+            retry_after = exc.headers.get("Retry-After")
+            delay = float(retry_after) if (retry_after or "").isdigit() else 12.0
+            time.sleep(min(delay, 20.0))
+    raise last  # unreachable; keeps the type checker honest
 
 
 def check_env_file() -> Check:
@@ -73,9 +97,7 @@ def check_football_data_token() -> Check:
         f"?dateFrom={today}&dateTo={window_end}",
         headers={"X-Auth-Token": token, "User-Agent": "NWay/0.1 (setup check)"})
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            payload = json.loads(response.read().decode())
-            remaining = response.headers.get("X-Requests-Available")
+        payload, remaining = _fetch_with_backoff(request)
         # The v4 matches endpoint does not carry a reliable "count" field;
         # reading one reports 0 on a perfectly healthy response.
         matches = payload.get("matches") or []
@@ -95,8 +117,18 @@ def check_football_data_token() -> Check:
             return Check("football-data.org token", FAIL,
                          f"rejected (HTTP {exc.code})",
                          "check the token was copied whole, with no spaces")
+        if exc.code == 429:
+            # The free tier allows 10 requests a minute and the quota is
+            # shared across everything using this token. Saying "may be fine"
+            # leaves the reader unable to tell a transient limit from a real
+            # fault, so name the limit and the remedy.
+            return Check(
+                "football-data.org token", WARN,
+                "rate limited (HTTP 429) — the token itself is fine",
+                "the free tier allows 10 requests/minute; wait a minute and "
+                "run `nway check` again")
         return Check("football-data.org token", WARN, f"HTTP {exc.code}",
-                     "the token may be fine; the API may be rate-limiting")
+                     "an API-side problem; try again shortly")
     except Exception as exc:  # noqa: BLE001
         return Check("football-data.org token", WARN, f"could not reach API: {exc}",
                      "check your network connection")

@@ -57,3 +57,72 @@ def test_render_never_prints_a_secret(monkeypatch, config):
     monkeypatch.setenv("NWAY_RESEND_API_KEY", secret)
     output = render([Check("Resend API key", WARN, "HTTP 500", None)])
     assert secret not in output
+
+
+def test_rate_limit_is_reported_as_transient_not_as_a_bad_token(monkeypatch):
+    """A 429 during setup resolves itself; saying 'the token may be fine'
+    leaves the reader unable to act."""
+    import urllib.error
+
+    from nway import diagnostics
+
+    monkeypatch.setenv("NWAY_FOOTBALL_DATA_ORG_TOKEN", "a_real_looking_token")
+
+    def always_rate_limited(*_args, **_kwargs):
+        raise urllib.error.HTTPError("url", 429, "Too Many Requests", {}, None)
+
+    monkeypatch.setattr(diagnostics, "_fetch_with_backoff", always_rate_limited)
+    check = diagnostics.check_football_data_token()
+
+    assert check.status == WARN, "a rate limit is not a configuration failure"
+    assert "fine" in check.detail
+    assert "10 requests/minute" in (check.fix or "")
+
+
+def test_invalid_token_is_reported_as_a_failure(monkeypatch):
+    import urllib.error
+
+    from nway import diagnostics
+
+    monkeypatch.setenv("NWAY_FOOTBALL_DATA_ORG_TOKEN", "wrong")
+
+    def unauthorised(*_args, **_kwargs):
+        raise urllib.error.HTTPError("url", 403, "Forbidden", {}, None)
+
+    monkeypatch.setattr(diagnostics, "_fetch_with_backoff", unauthorised)
+    assert diagnostics.check_football_data_token().status == FAIL
+
+
+def test_rate_limit_is_retried_before_being_reported(monkeypatch):
+    """One transient 429 should be absorbed, not surfaced."""
+    import urllib.error
+
+    from nway import diagnostics
+
+    calls = {"n": 0}
+
+    class _Response:
+        headers = {"X-Requests-Available": "9"}
+        status = 200
+
+        def read(self):
+            return b'{"matches": []}'
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_a):
+            return False
+
+    def flaky(*_args, **_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise urllib.error.HTTPError("url", 429, "Too Many", {}, None)
+        return _Response()
+
+    monkeypatch.setattr(diagnostics.urllib.request, "urlopen", flaky)
+    monkeypatch.setattr(diagnostics.time, "sleep", lambda _s: None)
+
+    payload, remaining = diagnostics._fetch_with_backoff(object())
+    assert calls["n"] == 2
+    assert remaining == "9"
