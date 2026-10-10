@@ -3,6 +3,14 @@
   "recent_batches": [
     {
       "actual_send_time": null,
+      "batch_id": 2,
+      "created_at": "2026-10-10T09:45:12Z",
+      "recommendation_count": 54,
+      "skip_reason": "WAITING_FOR_SEND_WINDOW",
+      "status": "SKIPPED"
+    },
+    {
+      "actual_send_time": null,
       "batch_id": 1,
       "created_at": "2026-10-10T09:04:19Z",
       "recommendation_count": 54,
@@ -16,8 +24,8 @@
     "next_kickoff": "2026-10-10T11:30:00Z",
     "next_run_at": "2026-10-10T10:40:00Z",
     "reason": "60 fixtures in the next 72h; send window opens 2026-10-10T11:00:00Z",
-    "sleep_hours": 1.595
+    "sleep_hours": 0.913
   },
-  "updated_at": "2026-10-10T09:04:19Z",
+  "updated_at": "2026-10-10T09:45:13Z",
   "version": 1
 }
