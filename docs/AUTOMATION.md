@@ -37,12 +37,19 @@ next run reads it.
      rewrite this workflow's cron, commit state ──────┘
 ```
 
-Two distinct mechanisms, because either alone is fragile:
+**A fixed 30-minute heartbeat, and a gate that decides.** A run that is not
+due exits in about thirty seconds, so a quiet day costs ~48 short runs and the
+interval matches the configured tick cadence exactly.
 
-- **The cron is rewritten** to a dense window around the computed time, so the
-  run actually fires when it should.
-- **The gate** re-checks the recorded time at the start of every run, so a
-  stale or over-eager cron costs thirty seconds rather than a wrong batch.
+> **An earlier version rewrote the workflow's own cron** so the schedule
+> tightened and loosened with the fixture calendar. That cannot work on GitHub
+> Actions: `GITHUB_TOKEN` is forbidden from pushing changes to
+> `.github/workflows`, and the permission is not grantable to it — only a
+> personal access token or a GitHub App can. Every run from 2026-09-22 to
+> 2026-10-09 failed on that push, which also meant the state file in the same
+> commit never landed and `actions/cache` never saved its post-step, so each
+> run rebuilt 21,000 matches and then failed again. The heartbeat is less
+> elegant and actually works.
 
 ## 3. What decides the next run
 
@@ -109,12 +116,13 @@ gate on the first run.
 
 ## 6. Guard rails
 
-- **The safety-net cron `17 6 * * *` is never removed.** The rewriter
-  reinstates it unconditionally, so a bad computed window cannot leave the
-  workflow unscheduled.
-- **Cron values are validated** before being written. Anything that is not five
-  well-formed fields is rejected, so a malformed computed output cannot inject
-  into the workflow file. Tested.
+- **The commit is `continue-on-error`.** A failed job skips `actions/cache`'s
+  save step, which is how a single rejected push became a 7-minute rebuild on
+  every subsequent run. A lost state commit costs nothing — the next tick
+  recomputes it.
+- **The current season's statistics are refreshed every run.** A hardcoded
+  season range rots: the workflow asked for `2017/18..2025/26` for weeks after
+  2026/27 began, leaving form features months stale.
 - **`concurrency: cancel-in-progress: false`.** Runs queue rather than cancel;
   a cancelled run would leave the schedule un-advanced and strand the loop.
 - **The schedule is recomputed with `if: always()`**, so a failed tick still
@@ -127,13 +135,9 @@ gate on the first run.
 ## 7. Known limitations
 
 - **GitHub's scheduled runs are routinely late**, sometimes 15 minutes or more
-  under load. The 0.5-hour target lead time absorbs this, and the computed
-  window starts 20 minutes early, but a very late run can still miss a send
-  window. The batch is not lost — the next run picks it up — but the lead time
-  will be shorter than intended.
-- **A changed cron takes time to propagate.** GitHub reads schedules from the
-  default branch, and a newly committed schedule is not always honoured
-  immediately. The daily safety net covers the gap.
+  under load. The 0.5-hour target lead time absorbs this, but a very late run
+  can still miss a send window. The batch is not lost — the next run picks it
+  up — though the lead time will be shorter than intended.
 - **Scheduled workflows are disabled after 60 days of repository inactivity.**
   The daily run commits state often enough to prevent this, but only while the
   loop is healthy.

@@ -1,21 +1,24 @@
 name: Predict
 
-# Self-scheduling. Each run computes when the next one should happen -- from
-# real fixture timestamps, not a fixed interval -- writes that to
-# state/nway-state.json, and rewrites the cron block below to match.
+# Runs on a fixed 30-minute heartbeat; `nway schedule` decides whether each
+# run does any work.
 #
-# During an international break the next kickoff can be three weeks out, so the
-# loop settles to one cheap run a day. On a matchday it tightens to every
-# fifteen minutes around the send window.
+# The schedule used to be rewritten by the job itself to match the computed
+# next run time. That cannot work: GITHUB_TOKEN is forbidden from pushing
+# changes to .github/workflows, and the permission is not grantable to it --
+# only a personal access token or a GitHub App can do it. Every run from
+# 2026-09-22 to 2026-10-09 failed on that push, which also meant the state
+# file in the same commit never landed and actions/cache never saved, so each
+# run rebuilt 21,000 matches from scratch and then failed.
 #
-# The block between the markers is machine-written. Edit the safety net if you
-# must, but leave the markers in place.
+# The heartbeat plus the gate gives the same behaviour without the failure
+# mode. A run that is not due exits in about thirty seconds, so a quiet day
+# costs ~48 short runs, and 30 minutes matches the configured tick interval
+# exactly -- which the rewritten cron only ever approximated.
 
 on:
   schedule:
-    # >>> nway:dynamic-schedule
-    - cron: "17 6 * * *"
-    # <<< nway:dynamic-schedule
+    - cron: "*/30 * * * *"
   workflow_dispatch:
     inputs:
       force_tick:
@@ -123,12 +126,21 @@ jobs:
           steps.cache.outputs.cache-matched-key == ''
         run: |
           nway init-db
-          nway ingest --history --seasons 2017/18..2025/26
+          nway ingest --history --seasons 2017/18..current
           # The Champions League has no CSV source; its training history comes
           # from football-data.org. Without this the competition is unfitted
           # and every UCL fixture is refused.
           nway ingest --org-history --competitions champions_league
           nway train --through "$(date -u +%Y-%m-%d)"
+
+      # The current season's statistics every run, not just on a rebuild.
+      # Form features are computed from these, and a range ending at a
+      # hardcoded past season leaves them months behind: on 2026-10-10 the
+      # newest statistics were from May, and every candidate was rejected.
+      # Seven small files, and the client skips unchanged ones via ETag.
+      - name: Refresh current-season statistics
+        if: steps.secrets.outputs.configured == 'true' && (steps.gate.outputs.due == 'true' || inputs.force_tick == true)
+        run: nway ingest --history --seasons current
 
       # The ledger of what has already been emailed lives in the repository,
       # not the cache. An evicted cache then costs a rebuild rather than a
@@ -171,26 +183,23 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Rewrite the cron schedule
-        if: always() && steps.next.outcome == 'success' && github.ref == 'refs/heads/main'
-        run: |
-          while IFS= read -r line; do
-            [ -n "$line" ] && set -- "$@" "$line"
-          done <<< "${{ steps.next.outputs.cron }}"
-          python .github/scripts/rewrite_cron.py .github/workflows/predict.yml "$@"
-
+      # Only the state file. GITHUB_TOKEN may not touch .github/workflows.
+      #
+      # continue-on-error because a lost push must not fail the job: a failed
+      # job skips actions/cache's save step, which is what turned one push
+      # rejection into a 7-minute rebuild on every subsequent run. The next
+      # tick recomputes the schedule anyway, so a missed commit costs nothing.
       - name: Commit state
         if: always() && steps.next.outcome == 'success' && github.ref == 'refs/heads/main'
+        continue-on-error: true
         run: |
           git config user.name  "nway-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state/nway-state.json .github/workflows/predict.yml
+          git add state/nway-state.json
           if git diff --cached --quiet; then
             echo "no state change"
           else
             git commit -m "chore: next run ${{ steps.next.outputs.next_run_at }} (${{ steps.next.outputs.code }})"
-            # Another run may have pushed while this one worked; rebase rather
-            # than clobber, and never force.
             git pull --rebase --autostash origin main
             git push origin HEAD:main
           fi

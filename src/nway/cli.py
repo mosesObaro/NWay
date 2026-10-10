@@ -38,12 +38,28 @@ def _parse_moment(value: str | None) -> dt.datetime | None:
     return clock.from_iso(text)
 
 
+def current_season_label(today: dt.date | None = None) -> str:
+    """The season in progress. European seasons run August to May.
+
+    Needed because a hardcoded end season silently rots: the workflow asked for
+    2017/18..2025/26 for weeks after 2026/27 had started, so form features were
+    months stale and every candidate was rejected.
+    """
+    today = today or clock.now().date()
+    start_year = today.year if today.month >= 7 else today.year - 1
+    return f"{start_year}/{str(start_year + 1)[-2:]}"
+
+
 def _season_range(spec: str) -> list[str]:
-    """'2017/18..2025/26' or a comma-separated list."""
+    """'2017/18..2025/26', '2017/18..current', 'current', or a comma list."""
+    spec = spec.strip()
+    if spec.lower() == "current":
+        return [current_season_label()]
     if ".." in spec:
         start, end = spec.split("..")
         first = int(start.split("/")[0])
-        last = int(end.split("/")[0])
+        last = (int(current_season_label().split("/")[0])
+                if end.strip().lower() == "current" else int(end.split("/")[0]))
         return [f"{y}/{str(y + 1)[-2:]}" for y in range(first, last + 1)]
     return [s.strip() for s in spec.split(",") if s.strip()]
 
@@ -177,7 +193,6 @@ def cmd_schedule(args, config) -> int:
         "code": decision.code,
         "sleep_hours": str(decision.sleep_hours),
         "fixtures_in_window": str(decision.fixtures_in_window),
-        "cron": "\n".join(decision.cron),
     })
     return 0
 

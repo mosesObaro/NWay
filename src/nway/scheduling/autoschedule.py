@@ -53,7 +53,6 @@ class ScheduleDecision:
     fixtures_in_window: int
     next_kickoff: str | None
     sleep_hours: float
-    cron: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -122,31 +121,7 @@ def decide_next_run(db: Database, config: Config,
         fixtures_in_window=len(in_window),
         next_kickoff=clock.to_iso(next_kickoff) if next_kickoff else None,
         sleep_hours=round(clock.hours_between(now, target), 3))
-    decision.cron = build_cron(target, now)
     return decision
-
-
-def build_cron(target: dt.datetime, now: dt.datetime) -> list[str]:
-    """Cron lines that will fire around `target`, plus a daily safety net.
-
-    A single cron entry matching one minute would be fragile: GitHub routinely
-    runs scheduled jobs late, and a missed minute means a missed batch. A short
-    dense window around the target absorbs that, and the daily entry means the
-    loop can always recover even if the dense window is wrong.
-    """
-    target = clock.ensure_utc(target)
-    lines: list[str] = []
-    if clock.hours_between(now, target) <= MAX_SLEEP_HOURS:
-        start_hour = max(0, target.hour - 1)
-        end_hour = min(23, target.hour + 1)
-        hours = (f"{start_hour}-{end_hour}" if start_hour != end_hour
-                 else str(start_hour))
-        lines.append(f"*/15 {hours} {target.day} {target.month} *")
-    # Safety net: a daily run keeps the cache warm, keeps the scheduled
-    # workflow from being disabled for inactivity, and recovers the loop if the
-    # dense window above ever fails to fire.
-    lines.append("17 6 * * *")
-    return lines
 
 
 # --------------------------------------------------------------- state file

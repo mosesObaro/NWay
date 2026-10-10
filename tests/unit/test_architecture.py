@@ -152,3 +152,31 @@ def test_over_1_5_floor_exceeds_its_base_rate_meaningfully():
     config = load_config()
     market = config.market("OVER_1_5")
     assert market.min_probability > market.base_rate + 0.04
+
+
+def test_every_stored_market_is_declared_in_config():
+    """The pipeline stores a fixed market list; the registry must cover it.
+
+    Six of the fifteen were undeclared, so 282 of 705 candidates were thrown
+    out as UNKNOWN_MARKET on 2026-10-10 -- silently, because an unknown market
+    is just another rejection reason.
+    """
+    from nway.config import load_config
+    from nway.prediction.pipeline import STORED_MARKETS
+
+    declared = {market.key for market in load_config().markets}
+    missing = sorted(set(STORED_MARKETS) - declared)
+    assert not missing, f"markets predicted but not declared: {missing}"
+
+
+def test_every_declared_family_has_a_diversity_cap():
+    """A family without a cap is unbounded in a batch."""
+    from nway.config import load_config
+
+    config = load_config()
+    caps = (config.recommendations.get("diversity", {})
+            .get("family_share_caps", {}) or {})
+    families = {m.family for m in config.markets
+                if m.recommendable and m.enabled_competitions}
+    uncapped = sorted(families - set(caps))
+    assert not uncapped, f"recommendable families with no cap: {uncapped}"

@@ -14,7 +14,7 @@ import pytest
 
 from nway import clock
 from nway.scheduling.autoschedule import (
-    MAX_SLEEP_HOURS, MIN_GAP_MINUTES, build_cron, decide_next_run,
+    MAX_SLEEP_HOURS, MIN_GAP_MINUTES, decide_next_run,
     export_state, import_state, is_due, read_next_run,
 )
 
@@ -83,18 +83,6 @@ def test_sleep_is_always_clamped(seeded, config, hours_ahead):
     assert MIN_GAP_MINUTES / 60 - 1e-6 <= decision.sleep_hours <= MAX_SLEEP_HOURS + 1e-6
 
 
-def test_cron_always_carries_a_safety_net():
-    lines = build_cron(NOW + dt.timedelta(hours=5), NOW)
-    assert "17 6 * * *" in lines, "no daily fallback; the loop could strand"
-    assert len(lines) == 2
-
-
-def test_cron_fields_are_well_formed():
-    for offset in (0.2, 3, 12, 23.5):
-        for line in build_cron(NOW + dt.timedelta(hours=offset), NOW):
-            assert len(line.split()) == 5
-
-
 # ------------------------------------------------------------ state file
 def test_state_roundtrip_preserves_the_ledger(seeded, config, tmp_path):
     """The ledger must survive a database rebuild, or the system re-sends."""
@@ -158,3 +146,33 @@ def test_corrupt_state_file_does_not_deadlock(tmp_path):
     assert read_next_run(path) is None
     due, _ = is_due(now=NOW, path=path)
     assert due is True, "a corrupt state file must fail open, not strand the loop"
+
+
+# ------------------------------------------------- season range resolution
+def test_current_season_is_resolved_not_hardcoded():
+    """A hardcoded end season rots silently.
+
+    The workflow asked for 2017/18..2025/26 for weeks after 2026/27 began, so
+    form features were months stale and every candidate was rejected with
+    STALE_FEATURES. Nothing failed; the system just went quiet.
+    """
+    import datetime as dt
+
+    from nway.cli import _season_range, current_season_label
+
+    assert current_season_label(dt.date(2026, 10, 10)) == "2026/27"
+    assert _season_range("current") == [current_season_label()]
+    assert _season_range("2024/25..current")[-1] == current_season_label()
+
+
+@pytest.mark.parametrize("day,expected", [
+    (dt.date(2026, 6, 30), "2025/26"),   # June still belongs to the old season
+    (dt.date(2026, 7, 1), "2026/27"),    # July starts the new one
+    (dt.date(2026, 8, 21), "2026/27"),
+    (dt.date(2027, 5, 30), "2026/27"),
+    (dt.date(2027, 1, 15), "2026/27"),   # January is mid-season, not a new one
+])
+def test_season_boundary(day, expected):
+    from nway.cli import current_season_label
+
+    assert current_season_label(day) == expected

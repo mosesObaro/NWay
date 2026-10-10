@@ -49,6 +49,8 @@ recommendations:
       TOTALS: 0.40
       RESULT: 0.40
       BTTS: 0.30
+      TEAM_GOALS: 0.30
+      CLEAN_SHEET: 0.25
       CORNERS: 0.25
       CARDS: 0.25
     max_share_per_competition: 0.50

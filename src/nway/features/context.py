@@ -212,6 +212,54 @@ class AsOfRepository:
         """, (team_id, team_id, clock.to_iso(start), clock.to_iso(end),
               self._as_of_iso), default=0)
 
+    def data_lag_hours(self, team_id: int) -> float:
+        """How far BEHIND the statistics source is for this team.
+
+        Not the age of the newest data. Those differ whenever football pauses:
+        after an international break the newest statistics are legitimately
+        three weeks old because nothing was played, and a gate on absolute age
+        would refuse to recommend on the first matchday back -- the busiest day
+        in the window. Measured in production on 2026-10-10, that is exactly
+        what happened: 705 candidates, none eligible, with the source fully
+        up to date.
+
+        What the gate was always meant to catch is the source falling behind:
+        football-data.co.uk publishes roughly twice a week, so a match played
+        on Wednesday may not appear until Sunday. That is the gap measured
+        here -- between the team's most recent completed match and the most
+        recent one we hold statistics for. Caught up means zero, whenever the
+        last match happened to be.
+        """
+        latest_played = self.db.query_one("""
+            SELECT f.kickoff_utc FROM fixture f
+            JOIN match_result r ON r.fixture_id = f.fixture_id
+            WHERE (f.home_team_id = ? OR f.away_team_id = ?)
+              AND f.status = 'FINISHED' AND f.kickoff_utc < ?
+              AND r.knowledge_time <= ?
+            ORDER BY f.kickoff_utc DESC LIMIT 1
+        """, (team_id, team_id, self._as_of_iso, self._as_of_iso))
+        if latest_played is None:
+            return 0.0
+
+        latest_with_stats = self.db.query_one("""
+            SELECT f.kickoff_utc FROM fixture f
+            JOIN team_match_stats s ON s.fixture_id = f.fixture_id
+            WHERE s.team_id = ? AND f.status = 'FINISHED'
+              AND f.kickoff_utc < ? AND s.knowledge_time <= ?
+              AND s.shots IS NOT NULL
+            ORDER BY f.kickoff_utc DESC LIMIT 1
+        """, (team_id, self._as_of_iso, self._as_of_iso))
+        if latest_with_stats is None:
+            # Never any statistics for this team: the completeness gate owns
+            # that case, and reporting an enormous lag here would double-count
+            # it as a freshness failure.
+            return 0.0
+
+        lag = clock.hours_between(
+            clock.from_iso(latest_with_stats["kickoff_utc"]),
+            clock.from_iso(latest_played["kickoff_utc"]))
+        return max(0.0, round(lag, 2))
+
     def competition_baseline(self, competition_id: int,
                              season_id: int | None = None) -> dict[str, float]:
         """League scoring baseline as known at as_of.

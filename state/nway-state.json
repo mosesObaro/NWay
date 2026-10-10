@@ -1,18 +1,23 @@
 {
   "notified": [],
-  "recent_batches": [],
+  "recent_batches": [
+    {
+      "actual_send_time": null,
+      "batch_id": 1,
+      "created_at": "2026-10-10T08:54:14Z",
+      "recommendation_count": 54,
+      "skip_reason": "WAITING_FOR_SEND_WINDOW",
+      "status": "SKIPPED"
+    }
+  ],
   "schedule": {
-    "code": "WAITING_FOR_FIXTURES",
-    "cron": [
-      "*/15 20-22 21 9 *",
-      "17 6 * * *"
-    ],
-    "fixtures_in_window": 0,
-    "next_kickoff": "2026-10-09T17:45:00Z",
-    "next_run_at": "2026-09-21T21:23:30Z",
-    "reason": "no fixtures within 72h; next kickoff 2026-10-09 (19 days away), enters the window 2026-10-06T17:45:00Z",
-    "sleep_hours": 24.0
+    "code": "SEND_WINDOW_APPROACHING",
+    "fixtures_in_window": 60,
+    "next_kickoff": "2026-10-10T11:30:00Z",
+    "next_run_at": "2026-10-10T10:40:00Z",
+    "reason": "60 fixtures in the next 72h; send window opens 2026-10-10T11:00:00Z",
+    "sleep_hours": 1.726
   },
-  "updated_at": "2026-09-20T21:23:30Z",
+  "updated_at": "2026-10-10T08:56:27Z",
   "version": 1
 }

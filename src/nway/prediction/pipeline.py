@@ -122,7 +122,13 @@ class PredictionPipeline:
         data_completeness = completeness(features)
 
         newest = context.repo.max_knowledge_time
-        staleness = max(0.0, clock.hours_between(clock.from_iso(newest), as_of))
+        # Publication lag, not data age. See AsOfRepository.data_lag_hours:
+        # gating on age refuses every first matchday after an international
+        # break, when the source is in fact fully caught up.
+        staleness = max(context.repo.data_lag_hours(fixture["home_team_id"]),
+                        context.repo.data_lag_hours(fixture["away_team_id"]))
+        feature_age_hours = max(
+            0.0, clock.hours_between(clock.from_iso(newest), as_of))
 
         minimum = float(self.config.recommendations.get("eligibility", {})
                         .get("min_data_completeness", 0.85))
@@ -214,6 +220,8 @@ class PredictionPipeline:
             self._persist_markets(run_id, fixture, markets, calibrated,
                                   calibrator_versions, explanations)
         return result
+
+    # feature_age_hours is recorded for auditing only; the gate uses lag.
 
     # -- persistence -----------------------------------------------------
     def _persist_run(self, fixture, as_of, kickoff, hours_to_kickoff,

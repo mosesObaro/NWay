@@ -101,6 +101,67 @@ markets:
     min_probability: 0.651
     enabled_competitions: [ALL]
 
+  # These six were produced by the prediction pipeline but never declared
+  # here, so every one was rejected as UNKNOWN_MARKET -- 282 of 705 candidates
+  # on 2026-10-10. Base rates are the actual rates measured in the 2024/25
+  # walk-forward backtest (n=2364 each).
+  - key: OVER_0_5
+    family: TOTALS
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.944
+    min_probability: 0.958
+    recommendable: false
+    disabled_reason: >-
+      Technically well calibrated but almost information-free: "at least one
+      goal" comes in 94.4% of the time, so even a 97.7% call is a three-point
+      lift. Predicted and evaluated; never recommended.
+
+  - key: OVER_3_5
+    family: TOTALS
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.313
+    min_probability: 0.650
+    enabled_competitions: [ALL]
+    correlated_with: [OVER_1_5, OVER_2_5, BTTS]
+
+  - key: HOME_TO_SCORE
+    family: TEAM_GOALS
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.772
+    min_probability: 0.829
+    enabled_competitions: [ALL]
+    correlated_with: [BTTS, OVER_1_5]
+
+  - key: AWAY_TO_SCORE
+    family: TEAM_GOALS
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.717
+    min_probability: 0.788
+    enabled_competitions: [ALL]
+    correlated_with: [BTTS, OVER_1_5]
+
+  - key: HOME_CLEAN_SHEET
+    family: CLEAN_SHEET
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.283
+    min_probability: 0.650
+    enabled_competitions: [ALL]
+    correlated_with: [AWAY_TO_SCORE, BTTS]
+
+  - key: AWAY_CLEAN_SHEET
+    family: CLEAN_SHEET
+    derived_from: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.228
+    min_probability: 0.650
+    enabled_competitions: [ALL]
+    correlated_with: [HOME_TO_SCORE, BTTS]
+
   - key: EXPECTED_GOALS
     family: GOALS_NUMERIC
     derived_from: GOAL_MATRIX
