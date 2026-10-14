@@ -8,28 +8,40 @@ recommendations:
   # --- eligibility gates (hard pass/fail) ---
   eligibility:
     # Probability floors live in markets.yaml, per market, computed from each
-    # market's measured base rate. There is deliberately no single global floor.
+    # market's measured base rate. There is deliberately no global floor.
     min_data_completeness: 0.85
-    max_feature_staleness_hours: 96     # football-data.co.uk lags up to ~3 days
-    min_team_history_matches: 5         # newly promoted sides in August
-    min_settled_predictions: 500        # per (market, competition)
+    max_feature_staleness_hours: 96     # PUBLICATION LAG, not data age
+    min_team_history_matches: 5
+    min_settled_predictions: 500
     max_market_ece: 0.05
     min_lead_time_hours: 0.25
     require_confirmed_kickoff: true
     require_no_blocking_quality_issue: true
+    allow_cold_start: true
 
   # --- reliability scoring ---
   # Rank by a pessimistic estimate of the realised hit rate, not by raw
   # probability: the 10th percentile of a Beta posterior over (market,
   # competition, probability bucket) history. Thin cells are shrunk toward the
   # market-level rate, so small samples and miscalibration both lower the score
-  # without any hand-tuned weighting.
+  # without any hand-tuned weighting. This requires strictly Bernoulli
+  # settlement, which is why every handicap here is a half line or a 3-way.
   reliability:
     posterior_quantile: 0.10
     prior_pseudo_observations: 50
     probability_bucket_width: 0.05
     freshness_factor_floor: 0.80
     completeness_factor_floor: 0.80
+    # Mild preference for the more informative of two equally trusted calls.
+    # With no settled history the posterior is a function of probability, so
+    # without this the ranking is probability in disguise. Normalised lift is
+    # the share of the distance from a market's own base rate to certainty,
+    # which makes markets with different base rates comparable -- and shows
+    # that a high base rate does not imply low information: 98% against 85.3%
+    # scores 0.864, above BTTS at 90% against 54.8% (0.779). What it does
+    # separate out is thin calls, such as Under 5.5 cards at 90% against a
+    # 75.6% base rate (0.590). Weighted low: reliability still dominates.
+    lift_weight: 0.25
 
   confidence_bands:
     HIGH:   {min_posterior: 0.75, min_samples: 1000}
@@ -37,24 +49,43 @@ recommendations:
     LOW:    {recommendable: false}
 
   # --- diversity and correlation ---
-  # Measured cost of these caps: send-eligible windows fall from ~61% to ~53%,
-  # and 8.45% of otherwise-viable windows are starved below 7. That is accepted.
-  # Without caps the batch is 81% double chance -- technically the highest
-  # probabilities available, but one model's error would sink the whole batch.
+  #
+  # With 65 recommendable markets across four grids, an unconstrained batch
+  # would be twenty views of three or four estimates. Every market from one
+  # grid is a summation over the same cells, so co-selecting two of them adds
+  # no information -- only the appearance of it.
+  #
+  # Caps work on the GRID, not the market: a fixture contributes at most one
+  # bet from each grid lineage. Half-time markets share the goal lineage
+  # because they are a binomial split of the same full-time grid, not a
+  # separate estimate.
   diversity:
-    max_selections_per_fixture: 1
-    max_within_fixture_correlation: 0.30   # computed exactly from the goal matrix
+    max_selections_per_fixture: 2
+    max_selections_per_lineage_per_fixture: 1
+    lineages:
+      GOALS: [GOAL_MATRIX, HALF_MATRIX]
+      CORNERS: [CORNER_MATRIX]
+      CARDS: [CARD_DISTRIBUTION]
+    max_within_fixture_correlation: 0.30   # computed exactly from the grids
+    # Measured cost of these caps: send-eligible windows fall from ~61% to
+    # ~53%, and 8.45% of otherwise-viable windows are starved below seven.
+    # Accepted: without caps a batch was 81% double chance, and one model's
+    # error would sink all of it at once.
+    max_family_share: 0.25
     family_share_caps:
-      DOUBLE_CHANCE: 0.30
-      TOTALS: 0.40
-      RESULT: 0.40
-      BTTS: 0.30
-      TEAM_GOALS: 0.30
+      RESULT: 0.25
+      DOUBLE_CHANCE: 0.25
+      TOTALS: 0.25
+      BTTS: 0.25
+      TEAM_GOALS: 0.25
       CLEAN_SHEET: 0.25
-      CORNERS: 0.25
+      HANDICAP: 0.25
+      COMBO: 0.25
+      HALVES: 0.25
+      CORNERS_TOTAL: 0.25
+      CORNERS_TEAM: 0.25
+      CORNERS_RESULT: 0.25
       CARDS: 0.25
     max_share_per_competition: 0.50
-    # Caps are computed against the ACTUAL batch size, not max_count, then
-    # relaxed by one slot if they would starve a viable batch below min_count.
     relax_caps_before_skipping: true
     min_family_allowance: 2

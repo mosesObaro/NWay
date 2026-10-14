@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import datetime as dt
 import pickle
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -25,8 +25,11 @@ from nway.features.context import AsOfRepository
 from nway.logging_setup import get_logger
 from nway.models.baselines import BaseRateBaseline
 from nway.models.dixon_coles import DixonColesModel
-from nway.markets import derive_markets
-from nway.prediction.pipeline import STORED_MARKETS
+from nway.markets import (
+    ALL_DERIVED_MARKETS, derive_card_markets, derive_corner_markets,
+    derive_half_markets, derive_markets,
+)
+from nway.validation.resolvers import MatchFacts, settle
 from nway.storage.db import Database
 
 log = get_logger(__name__)
@@ -34,25 +37,10 @@ log = get_logger(__name__)
 CALIBRATOR_DIR = PROJECT_ROOT / "data" / "calibrators"
 OUTCOME_INDEX = {"H": 0, "D": 1, "A": 2}
 
-# Which derived market a real outcome settles. Kept beside training because the
-# calibrator needs the same resolution rule the settler uses.
-MARKET_RESOLVERS = {
-    "HOME_WIN": lambda h, a: int(h > a),
-    "DRAW": lambda h, a: int(h == a),
-    "AWAY_WIN": lambda h, a: int(h < a),
-    "DOUBLE_CHANCE_1X": lambda h, a: int(h >= a),
-    "DOUBLE_CHANCE_X2": lambda h, a: int(h <= a),
-    "OVER_0_5": lambda h, a: int(h + a > 0),
-    "OVER_1_5": lambda h, a: int(h + a > 1),
-    "OVER_2_5": lambda h, a: int(h + a > 2),
-    "OVER_3_5": lambda h, a: int(h + a > 3),
-    "UNDER_2_5": lambda h, a: int(h + a <= 2),
-    "BTTS": lambda h, a: int(h > 0 and a > 0),
-    "HOME_CLEAN_SHEET": lambda h, a: int(a == 0),
-    "AWAY_CLEAN_SHEET": lambda h, a: int(h == 0),
-    "HOME_TO_SCORE": lambda h, a: int(h > 0),
-    "AWAY_TO_SCORE": lambda h, a: int(a > 0),
-}
+# Market resolution lives in nway.validation.resolvers, shared with settlement
+# and with the base-rate generator, so a market cannot be calibrated against
+# one definition and settled against another.
+STORED_MARKETS: tuple[str, ...] = ALL_DERIVED_MARKETS
 
 
 @dataclass
@@ -64,6 +52,7 @@ class TrainingReport:
     train_end: dt.datetime
     metrics: dict[str, Any]
     calibrators_fitted: int
+    side_models: dict[str, str | None] = field(default_factory=dict)
 
     def summary(self) -> str:
         lines = [
@@ -76,15 +65,85 @@ class TrainingReport:
             if isinstance(value, float):
                 lines.append(f"{name:<16} {value:.4f}")
         lines.append(f"calibrators      {self.calibrators_fitted}")
+        for target, version in sorted(self.side_models.items()):
+            lines.append(f"{target.lower():<16} {version or 'not fitted'}")
         return "\n".join(lines)
 
 
 def _matches_between(db: Database, start: dt.datetime, end: dt.datetime,
                      competition_ids: Sequence[int] | None = None) -> list[dict[str, Any]]:
-    """Completed matches in a window, read through the as-of boundary at `end`."""
+    """Completed matches in a window, read through the as-of boundary at `end`.
+
+    Returns goals, corners, cards and half-time scores, each filtered on its
+    own knowledge_time: a match whose goals were knowable but whose corner
+    counts had not yet been published contributes its goals and NULL corners,
+    which is the truth at that moment.
+    """
     repo = AsOfRepository(db, end)
-    matches = repo.results_for_training(competition_ids, since=start)
+    matches = repo.training_rows(competition_ids, since=start)
     return [m for m in matches if m["home_goals"] is not None]
+
+
+def _facts_from_row(row: dict[str, Any]) -> MatchFacts:
+    return MatchFacts(
+        home_goals=row["home_goals"], away_goals=row["away_goals"],
+        ht_home_goals=row.get("ht_home_goals"),
+        ht_away_goals=row.get("ht_away_goals"),
+        home_corners=row.get("home_corners"), away_corners=row.get("away_corners"),
+        total_cards=row.get("total_cards"))
+
+
+def train_side_models(db: Database, config: Config, rows: list[dict[str, Any]],
+                      goal_model, train_start: dt.datetime,
+                      train_end: dt.datetime,
+                      register: bool = True) -> dict[str, str | None]:
+    """Fit the corner, card and half-share models.
+
+    Each is independent of the others and of the goal model's fit, but corners
+    take the goal model's expected margin as a supremacy feature -- a side
+    expected to dominate takes more corners (measured correlation between
+    corner difference and goal supremacy: +0.105).
+
+    A model that cannot be fitted returns None rather than raising: the markets
+    from that grid are then simply not produced, which is the correct behaviour
+    for a competition whose statistics no source supplies.
+    """
+    from nway.models.cards import CardModel
+    from nway.models.corners import CornerModel
+    from nway.models.halves import HalfShareModel
+
+    for row in rows:
+        if goal_model.is_fitted_for(row["competition_id"]):
+            lam_home, lam_away = goal_model.predict_lambdas(
+                row["home_team_id"], row["away_team_id"], row["competition_id"])
+            row["supremacy"] = lam_home - lam_away
+        else:
+            row["supremacy"] = 0.0
+
+    stamp = clock.now().strftime("%Y%m%d_%H%M%S")
+    versions: dict[str, str | None] = {}
+
+    for target, builder, subset in (
+        ("CORNERS", CornerModel,
+         [r for r in rows if r.get("home_corners") is not None]),
+        ("CARDS", CardModel,
+         [r for r in rows if r.get("total_cards") is not None]),
+        ("HALVES", HalfShareModel,
+         [r for r in rows if r.get("ht_home_goals") is not None]),
+    ):
+        try:
+            model = builder().fit(subset, as_of=train_end)
+        except ValueError as exc:
+            log.warning("side model not fitted", context={
+                "target": target, "matches": len(subset), "reason": str(exc)})
+            versions[target] = None
+            continue
+        version = f"{target.lower()}_{stamp}"
+        artifact = model.to_artifact(version, train_start, train_end)
+        if register:
+            artifact.register(db, active=True)
+        versions[target] = version
+    return versions
 
 
 def train_goal_model(db: Database, config: Config, *,
@@ -137,19 +196,51 @@ def train_goal_model(db: Database, config: Config, *,
     if register:
         artifact.register(db, active=True)
 
+    # Side grids are fitted on the same window as the goal model, then the
+    # calibrators see every grid at once.
+    side_versions = train_side_models(
+        db, config, fit_matches, model, train_start,
+        calibration_start if calibration_matches else train_end, register=register)
+    side_models = _load_side_models(db, side_versions)
+
     fitted = 0
     if calibration_matches:
         fitted = fit_calibrators(db, model, version, calibration_matches,
-                                 calibration_start, train_end, config)
+                                 calibration_start, train_end, config,
+                                 side_models=side_models)
 
     log.info("training complete", context={
         "model": version, "train": len(fit_matches),
+        "side_models": {k: bool(v) for k, v in side_versions.items()},
         "calibration": len(calibration_matches),
         "log_loss": round(metrics.get("log_loss_1x2", float("nan")), 4),
         "baseline": round(metrics.get("baseline_log_loss_1x2", float("nan")), 4),
     })
-    return TrainingReport(version, len(fit_matches), len(calibration_matches),
-                          train_start, train_end, metrics, fitted)
+    report = TrainingReport(version, len(fit_matches), len(calibration_matches),
+                            train_start, train_end, metrics, fitted)
+    report.side_models = side_versions
+    return report
+
+
+def _load_side_models(db: Database,
+                      versions: dict[str, str | None]) -> dict[str, Any]:
+    from nway.models.base import ModelArtifact
+    from nway.models.cards import CardModel
+    from nway.models.corners import CornerModel
+    from nway.models.halves import HalfShareModel
+
+    builders = {"CORNERS": CornerModel, "CARDS": CardModel,
+                "HALVES": HalfShareModel}
+    loaded: dict[str, Any] = {}
+    for target, version in versions.items():
+        if not version:
+            continue
+        try:
+            loaded[target] = builders[target].from_artifact(
+                ModelArtifact.load(version))
+        except (FileNotFoundError, KeyError):
+            continue
+    return loaded
 
 
 def _score(model: DixonColesModel, matches: Sequence[dict[str, Any]]) -> dict[str, Any]:
@@ -185,10 +276,43 @@ def _score_baseline(baseline: BaseRateBaseline,
     }
 
 
+def _all_probabilities(match: dict[str, Any], model: DixonColesModel,
+                       side_models: dict[str, Any] | None) -> dict[str, float]:
+    """Every grid's markets for one historical match."""
+    lam_home, lam_away = model.predict_lambdas(
+        match["home_team_id"], match["away_team_id"], match["competition_id"])
+    goals = derive_markets(lam_home, lam_away, model.params.rho)
+    probabilities = dict(goals.probabilities)
+
+    side_models = side_models or {}
+    half = side_models.get("HALVES")
+    if half is not None:
+        probabilities.update(derive_half_markets(
+            goals.matrix, half.share_for(match["competition_id"])).probabilities)
+
+    corners = side_models.get("CORNERS")
+    if corners is not None and corners.is_fitted_for(match["competition_id"]) \
+            and match.get("home_corners") is not None:
+        probabilities.update(derive_corner_markets(*corners.predict_parameters(
+            match["home_team_id"], match["away_team_id"],
+            match["competition_id"], supremacy=lam_home - lam_away)).probabilities)
+
+    cards = side_models.get("CARDS")
+    if cards is not None and cards.is_fitted_for(match["competition_id"]) \
+            and match.get("total_cards") is not None:
+        mean_cards, dispersion, _ = cards.predict_parameters(
+            match["home_team_id"], match["away_team_id"],
+            match["competition_id"], match.get("referee_id"))
+        probabilities.update(derive_card_markets(mean_cards, dispersion).probabilities)
+
+    return probabilities
+
+
 def fit_calibrators(db: Database, model: DixonColesModel, model_version: str,
                     matches: Sequence[dict[str, Any]],
                     window_start: dt.datetime, window_end: dt.datetime,
-                    config: Config) -> int:
+                    config: Config,
+                    side_models: dict[str, Any] | None = None) -> int:
     """Fit one calibrator per (market, competition) where the sample allows."""
     CALIBRATOR_DIR.mkdir(parents=True, exist_ok=True)
     min_settled = int(config.eligibility.get("min_settled_predictions", 500))
@@ -198,22 +322,24 @@ def fit_calibrators(db: Database, model: DixonColesModel, model_version: str,
     by_competition: dict[tuple[str, int], tuple[list[float], list[int]]] = {}
 
     for match in matches:
-        markets = derive_markets(
-            *model.predict_lambdas(match["home_team_id"], match["away_team_id"],
-                                   match["competition_id"]), model.params.rho)
-        home, away = match["home_goals"], match["away_goals"]
+        probabilities = _all_probabilities(match, model, side_models)
+        facts = _facts_from_row(match)
         for market_key in STORED_MARKETS:
-            probability = markets.probabilities.get(market_key)
-            resolver = MARKET_RESOLVERS.get(market_key)
-            if probability is None or resolver is None:
+            probability = probabilities.get(market_key)
+            if probability is None:
                 continue
-            outcome = resolver(home, away)
+            outcome = settle(market_key, facts)
+            if outcome is None:
+                # The facts this market needs were never published for this
+                # match; calibrating on an assumed outcome would be inventing
+                # data.
+                continue
             predictions[market_key].append(probability)
-            actuals[market_key].append(outcome)
+            actuals[market_key].append(int(outcome))
             key = (market_key, match["competition_id"])
             bucket = by_competition.setdefault(key, ([], []))
             bucket[0].append(probability)
-            bucket[1].append(outcome)
+            bucket[1].append(int(outcome))
 
     db.execute("DELETE FROM calibrator_version WHERE model_version = ?", (model_version,))
     fitted = 0

@@ -27,26 +27,30 @@ from nway.features.registry import feature_version
 from nway.logging_setup import get_logger
 from nway.models.base import ModelArtifact
 from nway.models.dixon_coles import DixonColesModel
-from nway.markets import check_coherence, derive_markets, market_selection
+from nway.markets import (
+    ALL_DERIVED_MARKETS, check_coherence, derive_card_markets,
+    derive_corner_markets, derive_half_markets, derive_markets, market_selection,
+)
 from nway.prediction.explain import build_explanations
 from nway.storage import repositories as repo
 from nway.storage.db import Database
 
 log = get_logger(__name__)
 
-# Which derived keys become stored predictions. Numeric quantities are stored
-# on the run (lambda_home/away) and as expected_value, not as probabilities.
 # No football outcome is certain. Even after Laplace-smoothed calibration, a
 # displayed "100%" would contradict the uncertainty notice the email carries,
 # so this is a hard backstop independent of any calibrator's behaviour.
 MAX_PROBABILITY = 0.99
 MIN_PROBABILITY = 0.01
 
-STORED_MARKETS = (
-    "HOME_WIN", "DRAW", "AWAY_WIN", "DOUBLE_CHANCE_1X", "DOUBLE_CHANCE_X2",
-    "OVER_0_5", "OVER_1_5", "OVER_2_5", "OVER_3_5", "UNDER_2_5", "BTTS",
-    "HOME_CLEAN_SHEET", "AWAY_CLEAN_SHEET", "HOME_TO_SCORE", "AWAY_TO_SCORE",
-)
+# Every market the four grids produce. Numeric quantities (expected goals,
+# expected corners) are stored on the run and as expected_value, never as
+# probabilities.
+#
+# Taken from the market registry rather than written out by hand: six markets
+# the pipeline stored were once absent from the configuration, so 282 of 705
+# candidates were discarded as UNKNOWN_MARKET with no error anywhere.
+STORED_MARKETS: tuple[str, ...] = ALL_DERIVED_MARKETS
 
 REFRESH_STAGES = (
     ("FINAL", 0.0, 2.0),
@@ -83,15 +87,28 @@ class PredictionResult:
 
 class PredictionPipeline:
     def __init__(self, db: Database, config: Config, model: DixonColesModel,
-                 model_version: str, calibrators: dict[str, Any] | None = None) -> None:
+                 model_version: str, calibrators: dict[str, Any] | None = None,
+                 corner_model: Any = None, card_model: Any = None,
+                 half_model: Any = None) -> None:
         self.db = db
         self.config = config
         self.model = model
         self.model_version = model_version
         self.calibrators = calibrators or {}
+        # Side grids. Absent models simply mean those markets are not produced,
+        # which is how the Champions League ends up with goals and halves only.
+        self.corner_model = corner_model
+        self.card_model = card_model
+        self.half_model = half_model
         self.artifact: ModelArtifact | None = None
 
     # -- calibration lookup ---------------------------------------------
+    def _grid_of(self, market_key: str) -> str:
+        try:
+            return self.config.market(market_key).grid
+        except KeyError:
+            return "GOAL_MATRIX"
+
     def _calibrator(self, market_key: str, competition_id: int):
         for key in ((market_key, competition_id), (market_key, None)):
             if key in self.calibrators:
@@ -174,12 +191,69 @@ class PredictionPipeline:
             fixture["home_team_id"], fixture["away_team_id"],
             fixture["competition_id"])
         markets = derive_markets(lam_home, lam_away, self.model.params.rho)
-        check_coherence(markets)
+
+        slug = fixture.get("competition_slug") or ""
+        available = set(self.config.grids_enabled_for(slug)) if slug else {
+            "GOAL_MATRIX", "HALF_MATRIX", "CORNER_MATRIX", "CARD_DISTRIBUTION"}
+
+        probabilities = dict(markets.probabilities)
+        grid_parameters: dict[str, Any] = {
+            "GOAL_MATRIX": {"lambda_home": round(lam_home, 6),
+                            "lambda_away": round(lam_away, 6),
+                            "rho": round(self.model.params.rho, 6)},
+        }
+
+        # Half-time: a binomial split of the SAME full-time grid, so the
+        # full-time marginal is preserved exactly and no half market can
+        # exceed its full-time counterpart.
+        if "HALF_MATRIX" in available and self.half_model is not None:
+            share = self.half_model.share_for(fixture["competition_id"])
+            half = derive_half_markets(markets.matrix, share)
+            probabilities.update(half.probabilities)
+            grid_parameters["HALF_MATRIX"] = {"share": round(share, 6)}
+
+        if "CORNER_MATRIX" in available and self.corner_model is not None \
+                and self.corner_model.is_fitted_for(fixture["competition_id"]):
+            parameters = self.corner_model.predict_parameters(
+                fixture["home_team_id"], fixture["away_team_id"],
+                fixture["competition_id"], supremacy=lam_home - lam_away)
+            corners = derive_corner_markets(*parameters)
+            probabilities.update(corners.probabilities)
+            grid_parameters["CORNER_MATRIX"] = {
+                "mean_total": round(parameters[0], 6),
+                "dispersion": round(parameters[1], 6),
+                "home_share": round(parameters[2], 6),
+                "concentration": round(parameters[3], 6)}
+
+        if "CARD_DISTRIBUTION" in available and self.card_model is not None \
+                and self.card_model.is_fitted_for(fixture["competition_id"]):
+            mean_cards, dispersion, referee_known = \
+                self.card_model.predict_parameters(
+                    fixture["home_team_id"], fixture["away_team_id"],
+                    fixture["competition_id"], fixture.get("referee_id"))
+            cards = derive_card_markets(mean_cards, dispersion)
+            probabilities.update(cards.probabilities)
+            grid_parameters["CARD_DISTRIBUTION"] = {
+                "mean_total": round(mean_cards, 6),
+                "dispersion": round(dispersion, 6),
+                "referee_known": referee_known}
+
+        # One coherence pass over the merged set: ladders, complements, trios
+        # and cross-grid impossibilities (a half cannot exceed the match, a
+        # team total cannot exceed the match total).
+        class _Merged:
+            pass
+        merged = _Merged()
+        merged.probabilities = probabilities
+        merged.matrix = markets.matrix
+        merged.lambda_home = lam_home
+        merged.lambda_away = lam_away
+        check_coherence(merged)
 
         calibrated: dict[str, float] = {}
         calibrator_versions: dict[str, str | None] = {}
         for market_key in STORED_MARKETS:
-            raw = markets.probabilities.get(market_key)
+            raw = probabilities.get(market_key)
             if raw is None:
                 continue
             calibrator = self._calibrator(market_key, fixture["competition_id"])
@@ -215,9 +289,9 @@ class PredictionPipeline:
             persist_features(self.db, fixture["fixture_id"], as_of, features, newest)
             run_id = self._persist_run(
                 fixture, as_of, kickoff, hours_to_kickoff, lam_home, lam_away,
-                data_completeness, staleness, snapshot_id)
+                data_completeness, staleness, snapshot_id, grid_parameters)
             result.prediction_run_id = run_id
-            self._persist_markets(run_id, fixture, markets, calibrated,
+            self._persist_markets(run_id, fixture, probabilities, calibrated,
                                   calibrator_versions, explanations)
         return result
 
@@ -226,7 +300,7 @@ class PredictionPipeline:
     # -- persistence -----------------------------------------------------
     def _persist_run(self, fixture, as_of, kickoff, hours_to_kickoff,
                      lam_home, lam_away, data_completeness, staleness,
-                     snapshot_id) -> int:
+                     snapshot_id, grid_parameters=None) -> int:
         as_of_iso = clock.to_iso(as_of)
         existing = self.db.query_one(
             "SELECT prediction_run_id FROM prediction_run WHERE fixture_id=? "
@@ -253,6 +327,7 @@ class PredictionPipeline:
             "snapshot_id": snapshot_id,
             "config_hash": self.config.config_hash,
             "lambda_home": round(lam_home, 5), "lambda_away": round(lam_away, 5),
+            "grid_parameters": json.dumps(grid_parameters or {}),
             "data_completeness": data_completeness,
             "feature_staleness_hours": round(staleness, 2),
             "created_at": clock.to_iso(clock.now()),
@@ -264,24 +339,32 @@ class PredictionPipeline:
                 (run_id, previous["prediction_run_id"]))
         return run_id
 
-    def _persist_markets(self, run_id, fixture, markets, calibrated,
+    def _persist_markets(self, run_id, fixture, probabilities, calibrated,
                          calibrator_versions, explanations) -> None:
         now = clock.to_iso(clock.now())
+        expected_for = {
+            "HOME_WIN": "EXPECTED_HOME_GOALS", "AWAY_WIN": "EXPECTED_AWAY_GOALS",
+        }
         for market_key, probability in calibrated.items():
             _, selection = market_selection(market_key)
             expected_value = None
-            if market_key in ("HOME_WIN", "AWAY_WIN"):
-                expected_value = (markets.probabilities["EXPECTED_HOME_GOALS"]
-                                  if market_key == "HOME_WIN"
-                                  else markets.probabilities["EXPECTED_AWAY_GOALS"])
+            if market_key in expected_for:
+                expected_value = probabilities.get(expected_for[market_key])
+            elif market_key.startswith("CORNERS_"):
+                expected_value = probabilities.get("EXPECTED_CORNERS")
+            elif market_key.startswith("CARDS_"):
+                expected_value = probabilities.get("EXPECTED_CARDS")
+            elif market_key.startswith("HT_"):
+                expected_value = probabilities.get("EXPECTED_HT_GOALS")
             prediction_id = self.db.insert("prediction", {
                 "prediction_run_id": run_id, "fixture_id": fixture["fixture_id"],
                 "market_key": market_key, "selection": selection,
-                "raw_probability": round(markets.probabilities[market_key], 6),
+                "raw_probability": round(probabilities[market_key], 6),
                 "calibrated_probability": round(probability, 6),
                 "calibrator_version": calibrator_versions.get(market_key),
                 "expected_value": expected_value,
-                "uncertainty": None, "is_derived_from": "GOAL_MATRIX",
+                "uncertainty": None,
+                "is_derived_from": self._grid_of(market_key),
                 "created_at": now,
             }, or_ignore=True)
             if not prediction_id:
@@ -306,10 +389,39 @@ def load_pipeline(db: Database, config: Config,
         raise RuntimeError("no active GOALS model; run `nway train` first")
     artifact = ModelArtifact.load(version)
     model = DixonColesModel.from_artifact(artifact)
-    pipeline = PredictionPipeline(db, config, model, version,
-                                  load_calibrators(db, version))
+
+    pipeline = PredictionPipeline(
+        db, config, model, version, load_calibrators(db, version),
+        corner_model=_load_side_model(db, "CORNERS"),
+        card_model=_load_side_model(db, "CARDS"),
+        half_model=_load_side_model(db, "HALVES"))
     pipeline.artifact = artifact
     return pipeline
+
+
+def _load_side_model(db: Database, target: str) -> Any:
+    """Load an active side model, or None when none has been trained.
+
+    None means those markets are simply not produced -- which is the correct
+    behaviour before the first training run, and permanently for a competition
+    whose statistics no source supplies.
+    """
+    from nway.models.base import active_model_version
+    from nway.models.cards import CardModel
+    from nway.models.corners import CornerModel
+    from nway.models.halves import HalfShareModel
+
+    loaders = {"CORNERS": CornerModel, "CARDS": CardModel,
+               "HALVES": HalfShareModel}
+    version = active_model_version(db, target)
+    if not version:
+        return None
+    try:
+        return loaders[target].from_artifact(ModelArtifact.load(version))
+    except (FileNotFoundError, KeyError) as exc:
+        log.warning("side model unavailable", context={
+            "target": target, "version": version, "error": str(exc)})
+        return None
 
 
 def load_calibrators(db: Database, model_version: str) -> dict[tuple[str, int | None], Any]:

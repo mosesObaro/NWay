@@ -379,6 +379,7 @@ CREATE TABLE prediction_run (
     snapshot_id           INTEGER NOT NULL REFERENCES data_snapshot,
     config_hash           TEXT    NOT NULL,
     lambda_home           REAL, lambda_away REAL,     -- the goal model's output
+    grid_parameters       TEXT,                       -- JSON, every grid used
     data_completeness     REAL    NOT NULL,           -- 0..1
     feature_staleness_hours REAL  NOT NULL,
     superseded_by         INTEGER REFERENCES prediction_run,

@@ -54,6 +54,7 @@ class Database:
     # -- lifecycle -------------------------------------------------------
     def migrate(self) -> None:
         self.conn.executescript(DDL)
+        self._add_missing_columns()
         current = self.conn.execute(
             "SELECT MAX(version) AS v FROM schema_version").fetchone()["v"]
         if current != SCHEMA_VERSION:
@@ -62,6 +63,26 @@ class Database:
                 (SCHEMA_VERSION, clock.to_iso(clock.now())),
             )
         log.info("schema ready", context={"path": str(self.path), "version": SCHEMA_VERSION})
+
+    def _add_missing_columns(self) -> None:
+        """Additive migrations for databases created by an earlier version.
+
+        CREATE TABLE IF NOT EXISTS leaves an existing table untouched, so a new
+        column in the DDL never reaches a database that already has the table.
+        Adding them here keeps an existing database usable without a dump and
+        reload -- which matters because the database holds the notification
+        ledger.
+        """
+        additions = {
+            "prediction_run": [("grid_parameters", "TEXT")],
+        }
+        for table, columns in additions.items():
+            existing = {row["name"] for row in
+                        self.conn.execute(f"PRAGMA table_info({table})")}
+            for name, column_type in columns:
+                if name not in existing:
+                    self.conn.execute(
+                        f"ALTER TABLE {table} ADD COLUMN {name} {column_type}")
 
     def close(self) -> None:
         self.conn.close()

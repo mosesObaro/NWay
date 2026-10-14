@@ -7,32 +7,14 @@ import datetime as dt
 import pytest
 
 from nway import clock
-from nway.validation.settlement import RESOLVERS, settle_finished_fixtures
+from nway.validation.settlement import settle_finished_fixtures
 
 
-@pytest.mark.parametrize("market,home,away,expected", [
-    ("HOME_WIN", 2, 1, True), ("HOME_WIN", 1, 1, False),
-    ("DRAW", 1, 1, True), ("AWAY_WIN", 0, 3, True),
-    ("DOUBLE_CHANCE_1X", 1, 1, True), ("DOUBLE_CHANCE_1X", 0, 1, False),
-    ("DOUBLE_CHANCE_X2", 1, 1, True), ("DOUBLE_CHANCE_X2", 2, 1, False),
-    ("OVER_1_5", 1, 1, True), ("OVER_1_5", 1, 0, False),
-    ("OVER_2_5", 2, 1, True), ("OVER_2_5", 1, 1, False),
-    ("UNDER_2_5", 1, 1, True), ("UNDER_2_5", 2, 1, False),
-    ("BTTS", 1, 1, True), ("BTTS", 3, 0, False),
-    ("HOME_CLEAN_SHEET", 2, 0, True), ("HOME_CLEAN_SHEET", 2, 1, False),
-    ("AWAY_CLEAN_SHEET", 0, 2, True),
-    ("HOME_TO_SCORE", 1, 0, True), ("AWAY_TO_SCORE", 0, 0, False),
-])
-def test_settlement_truth_table(market, home, away, expected):
-    assert RESOLVERS[market](home, away) is expected
-
-
-def test_boundary_scorelines_settle_correctly():
-    """Exactly on the line is the case that gets written wrong."""
-    assert RESOLVERS["OVER_2_5"](1, 1) is False     # 2 goals, not over 2.5
-    assert RESOLVERS["OVER_2_5"](2, 1) is True      # 3 goals
-    assert RESOLVERS["UNDER_2_5"](1, 1) is True
-    assert RESOLVERS["OVER_0_5"](0, 0) is False
+# The settlement truth table lives in tests/unit/test_new_markets.py, which
+# exercises all 86 markets through MatchFacts. What is tested here is the
+# database path: that a settled prediction records the right outcome, that a
+# postponed fixture voids, and that missing statistics are UNSETTLEABLE rather
+# than a loss.
 
 
 def _predict(db, fixture_id, market, probability=0.8):

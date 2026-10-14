@@ -83,7 +83,12 @@ class Market:
     key: str
     family: str
     mvp: bool
+    # Which joint grid this market is summed from. The diversity caps work on
+    # the grid rather than the market: every market from one grid is a view of
+    # the same estimate, so two of them are not two opportunities.
+    grid: str = "GOAL_MATRIX"
     base_rate: float | None = None
+    base_rate_n: int | None = None
     min_probability: float | None = None
     derived_from: str | None = None
     model: str | None = None
@@ -142,6 +147,20 @@ class Config:
     def mvp_markets(self) -> tuple[Market, ...]:
         return tuple(m for m in self.markets if m.mvp)
 
+    def markets_for_grid(self, grid: str) -> tuple[Market, ...]:
+        return tuple(m for m in self.markets if m.grid == grid)
+
+    def grids_enabled_for(self, competition_slug: str) -> tuple[str, ...]:
+        """Which grids can produce a recommendable market for a competition.
+
+        The Champions League has no per-match statistics on the free tier, so
+        its corner and card markets are enabled for no competition and those
+        grids simply do not apply there.
+        """
+        return tuple(sorted({
+            m.grid for m in self.markets
+            if m.recommendable and m.enabled_for(competition_slug)}))
+
     def provider_code(self, competition_slug: str, provider: str) -> str | None:
         return self.competition(competition_slug).providers.get(provider)
 
@@ -199,7 +218,10 @@ def load_config(config_dir: Path | None = None) -> Config:
     for entry in documents["markets"].get("markets", []) or []:
         markets.append(Market(
             key=entry["key"], family=entry["family"], mvp=bool(entry.get("mvp", False)),
-            base_rate=entry.get("base_rate"), min_probability=entry.get("min_probability"),
+            grid=entry.get("grid", "GOAL_MATRIX"),
+            base_rate=entry.get("base_rate"),
+            base_rate_n=entry.get("base_rate_n"),
+            min_probability=entry.get("min_probability"),
             derived_from=entry.get("derived_from"), model=entry.get("model"),
             enabled_competitions=tuple(entry.get("enabled_competitions", []) or ()),
             correlated_with=tuple(entry.get("correlated_with", []) or ()),

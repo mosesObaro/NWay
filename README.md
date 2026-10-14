@@ -82,6 +82,63 @@ of 126 upcoming fixtures clear the data gates; clubs from outside the seven
 configured leagues carry thin histories and are filtered out rather than
 guessed at.
 
+## Market coverage
+
+**86 markets across four joint grids**, 65 of them recommendable. Each event
+type has exactly one grid and every sub-market is a sum over its cells, so
+impossible orderings are unreachable rather than unlikely — a team total cannot
+exceed the match total, a first half cannot hold more goals than the match, and
+`P(Over 2.5) > P(Over 1.5)` cannot occur.
+
+| Grid | Markets | Construction |
+|---|---|---|
+| `GOAL_MATRIX` | 44 | Dixon–Coles 11×11 full-time grid |
+| `HALF_MATRIX` | 18 | binomial split of the **same** full-time grid |
+| `CORNER_MATRIX` | 21 | 26×26 negative-binomial total × beta-binomial share |
+| `CARD_DISTRIBUTION` | 6 | negative-binomial total cards |
+
+Covering 1X2, double chance, totals, team totals, BTTS, clean sheets, win to
+nil, Asian and European handicaps, result combinations, first-half markets,
+HT/FT, total and team corners, corner 1X2 and handicaps, and total cards.
+
+Held-out calibration on 2025/26, with the model trained through July 2025:
+
+| Grid | Mean ECE | Markets | Worst |
+|---|---|---|---|
+| `HALF_MATRIX` | **0.0213** | 18 | 0.0335 |
+| `GOAL_MATRIX` | **0.0254** | 41 | 0.0382 |
+| `CORNER_MATRIX` | 0.0396 | 21 | 0.0519 |
+| `CARD_DISTRIBUTION` | 0.0484 | 6 | 0.0499 |
+
+The two corner 10.5 lines are the only markets above the configured 0.05 ECE
+gate, so they are filtered out by it rather than shipped — which is the gate
+working, not a surprise.
+
+### Corners are not two independent counts
+
+The measurement that changed the design. Over 21,919 matches, home and away
+corners correlate at **−0.276**: one side having more means the other has
+fewer. An independent product gives var(home) + var(away) = 16.09 against a
+measured total variance of **11.68**, overstating the spread by 38% exactly at
+the 8.5–11.5 lines. So total corners are modelled as a negative binomial and
+the home share split off with a beta-binomial, which calibrates the total
+marginal by construction and induces the negative covariance through the
+mechanism itself:
+
+| | Observed | Model | Independent product |
+|---|---|---|---|
+| var total | 11.678 | **11.745** | 17.13 |
+| corr(home, away) | −0.276 | **−0.266** | −0.147 |
+
+### Settlement stays Bernoulli
+
+Asian handicaps use half lines only, so they cannot push, and ±0.5 is omitted
+because home +0.5 *is* double chance 1X. Whole-number handicaps are European
+3-way markets — three mutually exclusive binary outcomes — where a two-way
+whole-number line would push. The Beta posterior ranker needs 0/1 outcomes,
+and a property test asserts every 3-way trio resolves to exactly one winner
+across all scorelines from 0-0 to 5-5.
+
 ## How it decides what to send
 
 Most ticks send nothing. Measured on the 2024/25 calendar, a rolling 72-hour
@@ -107,6 +164,11 @@ that are **81% double chance**. Those are genuinely the highest probabilities
 available and, as a product, close to worthless — one goal-model error would
 sink the whole batch. The caps cost about **8 percentage points** of send
 frequency, which is recorded rather than hidden.
+
+With 86 markets the caps work on the **grid**, not the market: a fixture
+contributes at most one bet per grid lineage, and half-time markets share the
+goal lineage because they are a binomial split of the same grid rather than a
+separate estimate. No family may exceed 25% of a batch.
 
 ## Architecture
 

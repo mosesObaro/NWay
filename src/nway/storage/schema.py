@@ -11,7 +11,7 @@ it). A prediction made at ``as_of`` may read a row only when
 and it cannot be retrofitted, so it is here from the first migration.
 """
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 DDL = """
 PRAGMA journal_mode = WAL;
@@ -270,6 +270,11 @@ CREATE TABLE IF NOT EXISTS prediction_run (
     config_hash          TEXT NOT NULL,
     lambda_home          REAL,
     lambda_away          REAL,
+    -- Parameters of every grid used for this run, as JSON. Enough to
+    -- regenerate each grid on demand, which is what lets `nway explain` answer
+    -- "why this prediction?" and lets the recommendation engine recompute
+    -- exact within-grid correlation without re-running a model.
+    grid_parameters      TEXT,
     data_completeness    REAL NOT NULL,
     feature_staleness_hours REAL NOT NULL,
     superseded_by        INTEGER REFERENCES prediction_run,

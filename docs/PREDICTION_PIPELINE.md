@@ -25,9 +25,14 @@ fixture + as_of (prediction_timestamp)
         ▼
  [5] Distribution    11x11 goal matrix
         ▼
- [6] Derivation      every goal/result market from the matrix
+ [6] Derivation      44 goal/result markets, all sums over that matrix
         ▼
- [7] Side models     corners_nb, cards_nb   [Recommended]
+ [7] Side grids      HALF_MATRIX   binomial split of the SAME goal matrix (18)
+                     CORNER_MATRIX 26x26 NB total x beta-binomial share  (21)
+                     CARD_DISTRIBUTION NB total cards                     (6)
+                     -- gated per competition: the Champions League has no
+                        per-match statistics at any free tier, so only
+                        GOAL_MATRIX and HALF_MATRIX apply there
         ▼
  [8] Calibration     per (market, competition), temporally fitted
         ▼
@@ -119,18 +124,31 @@ Failure records a `prediction_skipped` event with the reason. The system
 declines to predict rather than predicting from corrupt inputs, and the skipped
 fixture is simply absent from the candidate pool.
 
+## 4b. One coherence pass over the merged set
+
+The four grids are merged into a single probability map and checked once, so
+cross-grid impossibilities are caught as well as within-grid ones. A failure
+rolls the whole run back rather than storing a partially consistent set.
+
 ## 5. Coherence invariants
 
 Asserted after derivation, failing the run if violated:
 
 ```
 |Σ matrix − 1|            < 1e-9
-|P(H)+P(D)+P(A) − 1|      < 1e-9
-P(Over 0.5) ≥ P(Over 1.5) ≥ P(Over 2.5) ≥ P(Over 3.5)
-P(BTTS) ≤ P(Over 1.5)
-E[total goals] ≈ λ_home + λ_away        (within 1e-6)
-P(double chance HD) = P(H) + P(D)
 every probability ∈ [0, 1]
+
+ladders            Over 0.5 ≥ 1.5 ≥ 2.5 ≥ 3.5
+                   home/away team totals, half-time, corner totals,
+                   team corners, card totals
+trios sum to 1     1X2, European handicap -1 and +1, corner 1X2,
+                   half-time 1X2, and the nine HT/FT cells
+complements        AH half-line pairs, corner AH pairs, BTTS/BTTS-no
+cross-grid         a team total cannot exceed the match total
+                   a first half cannot exceed the match
+                   a combination cannot exceed either component
+                   BTTS cannot exceed Over 1.5
+expected goals     ≈ λ_home + λ_away        (within 0.05)
 ```
 
 These are the payoff of deriving markets from one distribution: they are

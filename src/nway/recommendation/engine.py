@@ -67,6 +67,10 @@ class Candidate:
     # Fewest completed matches known for either side, from the stored features.
     team_history_matches: int | None = None
     model_scope: str = "mens_club"
+    # Which joint grid produced this market, and its lineage. Caps work on
+    # these rather than the market key: markets from one grid are summations
+    # over the same cells, so co-selecting two adds no information.
+    grid: str = "GOAL_MATRIX"
 
     @property
     def match_label(self) -> str:
@@ -103,14 +107,32 @@ class RecommendationEngine:
         self.reliability = recommendations.get("reliability", {}) or {}
         self.diversity = recommendations.get("diversity", {}) or {}
         self.bands = recommendations.get("confidence_bands", {}) or {}
+        self.lineages: dict[str, str] = {}
+        for lineage, grids in (self.diversity.get("lineages", {}) or {}).items():
+            for grid in grids or []:
+                self.lineages[grid] = lineage
         self.min_count = int(recommendations.get("min_count", 7))
         self.max_count = int(recommendations.get("max_count", 20))
         thresholds = config.thresholds or {}
         self.absolute_floor = float(thresholds.get("absolute_floor", 0.65))
         self.lift_k = float(thresholds.get("lift_k", 0.25))
         self._history_cache: dict[tuple[str, int, int], tuple[int, int]] = {}
+        self._known_markets = {m.key for m in config.markets}
 
     # -- floors ----------------------------------------------------------
+    def lineage_of(self, market_key: str) -> str:
+        """Grids that share an estimate share a lineage.
+
+        Half-time markets are a binomial split of the same full-time goal grid,
+        so a half bet and a full-time bet on one fixture are one estimate seen
+        twice -- not two opportunities.
+        """
+        try:
+            grid = self.config.market(market_key).grid
+        except KeyError:
+            grid = "GOAL_MATRIX"
+        return self.lineages.get(grid, grid)
+
     def floor_for(self, market_key: str) -> float:
         market = self.config.market(market_key)
         if market.min_probability is not None:
@@ -169,7 +191,14 @@ class RecommendationEngine:
             kickoff_is_confirmed=bool(row["kickoff_is_confirmed"]),
             team_history_matches=(None if row["team_history_matches"] is None
                                   else int(row["team_history_matches"])),
+            grid=self._grid_of(row["market_key"]),
         ) for row in rows]
+
+    def _grid_of(self, market_key: str) -> str:
+        try:
+            return self.config.market(market_key).grid
+        except KeyError:
+            return "GOAL_MATRIX"
 
     # -- eligibility -------------------------------------------------------
     def check_eligibility(self, candidate: Candidate, now: dt.datetime) -> list[str]:
@@ -310,15 +339,66 @@ class RecommendationEngine:
         observed = (hits / n) if n else None
         return score, n, observed
 
-    def confidence_band(self, reliability: float, n_history: int) -> str:
+    def _lift_factor(self, candidate: Candidate) -> float:
+        """Mild preference for the more informative of two equally trusted calls.
+
+        The design forbids ranking by raw probability, and with no settled
+        history the reliability score is a function of probability -- so
+        without this the ranking IS probability in disguise.
+
+        Normalised lift is the share of the distance from the market's own base
+        rate to certainty that the model has covered, which makes markets with
+        very different base rates comparable. Worth noting what it does NOT
+        say: "home not to lose by two or more" at 98% against an 85.3% base
+        rate scores 0.864, a *larger* lift than BTTS at 90% against 54.8%
+        (0.779). High base rate does not mean low information, and measuring
+        it was what settled that. What the factor does separate out is
+        genuinely thin calls: Under 5.5 cards at 90% against a 75.6% base rate
+        scores 0.590.
+
+        Weighted deliberately low -- reliability still dominates, because a
+        well-evidenced ordinary call beats an exciting unproven one.
+        """
+        weight = float(self.reliability.get("lift_weight", 0.25))
+        try:
+            base_rate = self.config.market(candidate.market_key).base_rate
+        except KeyError:
+            base_rate = None
+        if base_rate is None or base_rate >= 1.0:
+            return 1.0 - weight / 2
+        lift = (candidate.probability - base_rate) / (1.0 - base_rate)
+        return (1.0 - weight) + weight * min(1.0, max(0.0, lift))
+
+    def confidence_band(self, reliability: float, n_history: int,
+                        clears_floor: bool = True) -> str:
+        """HIGH / MEDIUM / LOW, from evidence where there is any.
+
+        With a settled track record the bands come from the posterior, which is
+        the point of computing it.
+
+        Without one the posterior is dominated by its prior, and that prior
+        blends the model's claim with the market's base rate -- so an absolute
+        posterior bar becomes a second, hidden probability floor whose severity
+        depends on the base rate. It bites hardest on exactly the markets where
+        the model has most headroom: Corners Over 8.5 at 80% against a 0.607
+        base rate scored 0.64 and was dropped, while Over 1.5 at 90% against a
+        0.836 base rate passed on a smaller lift. Backwards.
+
+        So at cold start the band defers to the market's own floor, which
+        already encodes "is this a strong call for THIS market", and caps at
+        MEDIUM because no track record can justify HIGH.
+        """
         high = self.bands.get("HIGH", {}) or {}
         medium = self.bands.get("MEDIUM", {}) or {}
+        min_samples = int(medium.get("min_samples", 500))
+
+        if n_history < min_samples:
+            return "MEDIUM" if clears_floor else "LOW"
+
         if (reliability >= float(high.get("min_posterior", 0.75))
                 and n_history >= int(high.get("min_samples", 1000))):
             return "HIGH"
         if reliability >= float(medium.get("min_posterior", 0.65)):
-            # Without a real track record, MEDIUM is the ceiling. Calling a
-            # cold-start prediction HIGH would be a claim the data cannot back.
             return "MEDIUM"
         return "LOW"
 
@@ -339,9 +419,13 @@ class RecommendationEngine:
                 1.0, candidate.feature_staleness_hours / staleness_limit)
             completeness = completeness_floor + (1 - completeness_floor) * min(
                 1.0, candidate.data_completeness)
-            ranking = reliability * freshness * completeness
+            ranking = reliability * freshness * completeness * self._lift_factor(
+                candidate)
 
-            band = self.confidence_band(reliability, n_history)
+            clears_floor = (candidate.market_key in self._known_markets
+                            and candidate.probability
+                            >= self.floor_for(candidate.market_key))
+            band = self.confidence_band(reliability, n_history, clears_floor)
             if band == "LOW" and not self.bands.get("LOW", {}).get("recommendable", False):
                 reasons.append("LOW_CONFIDENCE_BAND")
 
@@ -379,7 +463,10 @@ class RecommendationEngine:
         if len(unconstrained) < min_count:
             return unconstrained
 
-        shares = self.diversity.get("family_share_caps", {}) or {}
+        default_share = float(self.diversity.get("max_family_share", 0.25))
+        shares = dict(self.diversity.get("family_share_caps", {}) or {})
+        for market in self.config.markets:
+            shares.setdefault(market.family, default_share)
         minimum_allowance = int(self.diversity.get("min_family_allowance", 2))
         size = len(unconstrained)
         caps = {family: max(minimum_allowance, math.ceil(share * size))
@@ -395,13 +482,17 @@ class RecommendationEngine:
     def _greedy(self, eligible: Sequence[ScoredRecommendation],
                 family_caps: dict[str, int], max_count: int
                 ) -> list[ScoredRecommendation]:
-        max_per_fixture = int(self.diversity.get("max_selections_per_fixture", 1))
-        max_correlation = float(self.diversity.get("max_within_fixture_correlation", 0.30))
+        max_per_fixture = int(self.diversity.get("max_selections_per_fixture", 2))
+        max_per_lineage = int(
+            self.diversity.get("max_selections_per_lineage_per_fixture", 1))
+        max_correlation = float(
+            self.diversity.get("max_within_fixture_correlation", 0.30))
         competition_share = float(self.diversity.get("max_share_per_competition", 0.50))
         competition_cap = max(2, math.ceil(competition_share * max_count))
 
         selected: list[ScoredRecommendation] = []
         per_fixture: Counter[int] = Counter()
+        per_fixture_lineage: Counter[tuple[int, str]] = Counter()
         per_family: Counter[str] = Counter()
         per_competition: Counter[int] = Counter()
         chosen_by_fixture: dict[int, list[str]] = {}
@@ -411,6 +502,9 @@ class RecommendationEngine:
                 break
             candidate = item.candidate
             if per_fixture[candidate.fixture_id] >= max_per_fixture:
+                continue
+            lineage = self.lineage_of(candidate.market_key)
+            if per_fixture_lineage[(candidate.fixture_id, lineage)] >= max_per_lineage:
                 continue
             family = self.config.market(candidate.market_key).family
             if family in family_caps and per_family[family] >= family_caps[family]:
@@ -423,6 +517,7 @@ class RecommendationEngine:
             item.selected = True
             selected.append(item)
             per_fixture[candidate.fixture_id] += 1
+            per_fixture_lineage[(candidate.fixture_id, lineage)] += 1
             per_family[family] += 1
             per_competition[candidate.competition_id] += 1
             chosen_by_fixture.setdefault(candidate.fixture_id, []).append(
@@ -440,12 +535,22 @@ class RecommendationEngine:
         already = chosen.get(candidate.fixture_id)
         if not already:
             return False
+        # Markets from different grids have no shared cells, so the exact
+        # correlation is unavailable; the lineage cap already allows at most
+        # one per grid, and across grids the estimates are genuinely distinct.
+        same_grid = [key for key in already if self._grid_of(key) == candidate.grid]
+        if not same_grid:
+            return False
+        if candidate.grid != "GOAL_MATRIX":
+            # Only the goal grid is reconstructible from the stored run; for
+            # any other grid a second same-grid pick is refused outright.
+            return True
         if candidate.lambda_home is None or candidate.lambda_away is None:
             # No stored goal matrix means correlation cannot be computed, so
             # refuse the second selection rather than guess it is independent.
             return True
         markets = derive_markets(candidate.lambda_home, candidate.lambda_away)
-        for market_key in already:
+        for market_key in same_grid:
             correlation = markets.correlation(candidate.market_key, market_key)
             if correlation is None or abs(correlation) > limit:
                 return True

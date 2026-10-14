@@ -19,15 +19,90 @@ from zoneinfo import ZoneInfo
 from nway import clock
 from nway.storage.db import Database
 
-MARKET_LABELS = {
+MARKET_LABELS: dict[str, str] = {
+    # --- match result ---
     "HOME_WIN": "Home Win", "DRAW": "Draw", "AWAY_WIN": "Away Win",
-    "DOUBLE_CHANCE_1X": "Home Win or Draw", "DOUBLE_CHANCE_X2": "Draw or Away Win",
+    "DOUBLE_CHANCE_1X": "Home Win or Draw",
+    "DOUBLE_CHANCE_X2": "Draw or Away Win",
+    "DOUBLE_CHANCE_12": "Home or Away Win (no draw)",
+    # --- total goals ---
     "OVER_0_5": "Over 0.5 Goals", "OVER_1_5": "Over 1.5 Goals",
     "OVER_2_5": "Over 2.5 Goals", "OVER_3_5": "Over 3.5 Goals",
-    "UNDER_2_5": "Under 2.5 Goals", "BTTS": "Both Teams To Score",
-    "HOME_CLEAN_SHEET": "Home Clean Sheet", "AWAY_CLEAN_SHEET": "Away Clean Sheet",
-    "HOME_TO_SCORE": "Home Team To Score", "AWAY_TO_SCORE": "Away Team To Score",
+    "UNDER_1_5": "Under 1.5 Goals", "UNDER_2_5": "Under 2.5 Goals",
+    "UNDER_3_5": "Under 3.5 Goals",
+    "BTTS": "Both Teams To Score", "BTTS_NO": "Both Teams To Score - No",
+    # --- team goals ---
+    "HOME_TO_SCORE": "Home Team To Score",
+    "AWAY_TO_SCORE": "Away Team To Score",
+    "HOME_OVER_1_5": "Home Team Over 1.5 Goals",
+    "HOME_OVER_2_5": "Home Team Over 2.5 Goals",
+    "AWAY_OVER_1_5": "Away Team Over 1.5 Goals",
+    "AWAY_OVER_2_5": "Away Team Over 2.5 Goals",
+    # --- clean sheets ---
+    "HOME_CLEAN_SHEET": "Home Team Clean Sheet",
+    "AWAY_CLEAN_SHEET": "Away Team Clean Sheet",
+    "HOME_WIN_TO_NIL": "Home Team To Win To Nil",
+    "AWAY_WIN_TO_NIL": "Away Team To Win To Nil",
+    # --- handicaps. Spelled out, because "+1.5" alone is not self-explanatory.
+    "AH_HOME_MINUS_1_5": "Home Team To Win By 2 Or More",
+    "AH_AWAY_PLUS_1_5": "Home Team To Win By 1 Or Fewer (or not win)",
+    "AH_AWAY_MINUS_1_5": "Away Team To Win By 2 Or More",
+    "AH_HOME_PLUS_1_5": "Home Team Not To Lose By 2 Or More",
+    "EH_MINUS_1_HOME": "Home Team To Win By 2 Or More (handicap -1)",
+    "EH_MINUS_1_DRAW": "Home Team To Win By Exactly 1 (handicap -1)",
+    "EH_MINUS_1_AWAY": "Away Team To Draw Or Win (handicap -1)",
+    "EH_PLUS_1_HOME": "Home Team To Draw Or Win (handicap +1)",
+    "EH_PLUS_1_DRAW": "Away Team To Win By Exactly 1 (handicap +1)",
+    "EH_PLUS_1_AWAY": "Away Team To Win By 2 Or More (handicap +1)",
+    # --- combinations ---
+    "HOME_AND_BTTS": "Home Win & Both Teams To Score",
+    "DRAW_AND_BTTS": "Draw & Both Teams To Score",
+    "AWAY_AND_BTTS": "Away Win & Both Teams To Score",
+    "HOME_AND_OVER_2_5": "Home Win & Over 2.5 Goals",
+    "DRAW_AND_OVER_2_5": "Draw & Over 2.5 Goals",
+    "AWAY_AND_OVER_2_5": "Away Win & Over 2.5 Goals",
+    # --- first half ---
+    "HT_OVER_0_5": "Over 0.5 Goals in the First Half",
+    "HT_OVER_1_5": "Over 1.5 Goals in the First Half",
+    "HT_UNDER_0_5": "No Goals in the First Half",
+    "HT_UNDER_1_5": "Under 1.5 Goals in the First Half",
+    "HT_HOME_WIN": "Home Team Leading at Half Time",
+    "HT_DRAW": "Level at Half Time",
+    "HT_AWAY_WIN": "Away Team Leading at Half Time",
+    "HT_DOUBLE_CHANCE_1X": "Home Leading or Level at Half Time",
+    "HT_DOUBLE_CHANCE_X2": "Away Leading or Level at Half Time",
+    # --- corners ---
+    "CORNERS_OVER_8_5": "Over 8.5 Corners", "CORNERS_UNDER_8_5": "Under 8.5 Corners",
+    "CORNERS_OVER_9_5": "Over 9.5 Corners", "CORNERS_UNDER_9_5": "Under 9.5 Corners",
+    "CORNERS_OVER_10_5": "Over 10.5 Corners",
+    "CORNERS_UNDER_10_5": "Under 10.5 Corners",
+    "CORNERS_OVER_11_5": "Over 11.5 Corners",
+    "CORNERS_UNDER_11_5": "Under 11.5 Corners",
+    "HOME_CORNERS_OVER_3_5": "Home Team Over 3.5 Corners",
+    "HOME_CORNERS_OVER_4_5": "Home Team Over 4.5 Corners",
+    "HOME_CORNERS_OVER_5_5": "Home Team Over 5.5 Corners",
+    "AWAY_CORNERS_OVER_3_5": "Away Team Over 3.5 Corners",
+    "AWAY_CORNERS_OVER_4_5": "Away Team Over 4.5 Corners",
+    "AWAY_CORNERS_OVER_5_5": "Away Team Over 5.5 Corners",
+    "CORNERS_1X2_HOME": "Home Team More Corners",
+    "CORNERS_1X2_DRAW": "Equal Corners",
+    "CORNERS_1X2_AWAY": "Away Team More Corners",
+    "CORNERS_AH_HOME_MINUS_1_5": "Home Team 2 Or More Corners Clear",
+    "CORNERS_AH_AWAY_PLUS_1_5": "Home Team Fewer Than 2 Corners Clear",
+    "CORNERS_AH_AWAY_MINUS_1_5": "Away Team 2 Or More Corners Clear",
+    "CORNERS_AH_HOME_PLUS_1_5": "Home Team Not 2 Or More Corners Behind",
+    # --- cards ---
+    "CARDS_OVER_3_5": "Over 3.5 Cards", "CARDS_UNDER_3_5": "Under 3.5 Cards",
+    "CARDS_OVER_4_5": "Over 4.5 Cards", "CARDS_UNDER_4_5": "Under 4.5 Cards",
+    "CARDS_OVER_5_5": "Over 5.5 Cards", "CARDS_UNDER_5_5": "Under 5.5 Cards",
 }
+
+# HT/FT: nine combinations, derived and evaluated but never recommended.
+for _first, _first_label in (("H", "Home"), ("D", "Level"), ("A", "Away")):
+    for _second, _second_label in (("H", "Home Win"), ("D", "Draw"),
+                                   ("A", "Away Win")):
+        MARKET_LABELS[f"HTFT_{_first}_{_second}"] = (
+            f"{_first_label} at Half Time / {_second_label}")
 
 UNCERTAINTY_NOTICE = (
     "These are probability estimates from a statistical model, not predictions "

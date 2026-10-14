@@ -195,6 +195,75 @@ class AsOfRepository:
             self._note(row["knowledge_time"])
         return [dict(r) for r in rows]
 
+    def training_rows(self, competition_ids: Sequence[int] | None = None,
+                      since: dt.datetime | None = None,
+                      require_stats: bool = False) -> list[dict[str, Any]]:
+        """Completed matches with goals, corners, cards and half-time scores.
+
+        Every source carries its own knowledge_time and every one is filtered:
+        the result, the home side's statistics and the away side's statistics.
+        A match whose goals were knowable but whose corner counts had not yet
+        been published contributes its goals and NULL corners -- which is the
+        truth at that moment, and is why the corner model trains on fewer
+        matches than the goal model.
+        """
+        conditions = ["r.knowledge_time <= ?", "f.kickoff_utc < ?",
+                      "f.status = 'FINISHED'"]
+        params: list[Any] = [self._as_of_iso, self._as_of_iso]
+        if since:
+            conditions.append("f.kickoff_utc >= ?")
+            params.append(clock.to_iso(since))
+        if competition_ids:
+            conditions.append(
+                f"f.competition_id IN ({','.join('?' * len(competition_ids))})")
+            params.extend(competition_ids)
+
+        # The statistics join is as-of filtered in the JOIN, not the WHERE, so
+        # a match with late-published statistics still contributes its goals
+        # rather than disappearing from the goal model's training set.
+        rows = self.db.query(f"""
+            SELECT f.fixture_id, f.competition_id, f.season_id, f.kickoff_utc,
+                   f.home_team_id, f.away_team_id, f.referee_id,
+                   r.home_goals, r.away_goals, r.ht_home_goals, r.ht_away_goals,
+                   r.outcome, r.knowledge_time,
+                   h.corners AS home_corners, a.corners AS away_corners,
+                   h.yellow_cards AS home_yellow, a.yellow_cards AS away_yellow,
+                   h.red_cards AS home_red, a.red_cards AS away_red,
+                   h.shots AS home_shots, a.shots AS away_shots,
+                   MAX(COALESCE(h.knowledge_time, ''),
+                       COALESCE(a.knowledge_time, '')) AS stats_knowledge_time
+            FROM match_result r
+            JOIN fixture f ON f.fixture_id = r.fixture_id
+            LEFT JOIN team_match_stats h
+              ON h.fixture_id = f.fixture_id AND h.is_home = 1
+                 AND h.knowledge_time <= ?
+            LEFT JOIN team_match_stats a
+              ON a.fixture_id = f.fixture_id AND a.is_home = 0
+                 AND a.knowledge_time <= ?
+            WHERE {' AND '.join(conditions)}
+            ORDER BY f.kickoff_utc
+        """, [self._as_of_iso, self._as_of_iso, *params])
+
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            self._note(row["knowledge_time"])
+            if row["stats_knowledge_time"]:
+                self._note(row["stats_knowledge_time"])
+            record = dict(row)
+            yellows = record.pop("home_yellow"), record.pop("away_yellow")
+            reds = record.pop("home_red"), record.pop("away_red")
+            if yellows[0] is not None and yellows[1] is not None:
+                record["total_cards"] = (yellows[0] + yellows[1]
+                                         + (reds[0] or 0) + (reds[1] or 0))
+            else:
+                record["total_cards"] = None
+            record["supremacy"] = None
+            if require_stats and (record["home_corners"] is None
+                                  or record["away_corners"] is None):
+                continue
+            out.append(record)
+        return out
+
     def last_match_before(self, team_id: int,
                           before: dt.datetime) -> MatchRow | None:
         matches = self.team_matches(team_id, limit=1, before=before)

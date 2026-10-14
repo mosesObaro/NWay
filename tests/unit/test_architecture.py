@@ -84,13 +84,17 @@ def test_no_scheduling_query_filters_on_matchday():
                 f"{module} filters on matchday: {stripped!r}"
 
 
-def test_every_market_in_config_has_a_derivation_or_a_model():
+def test_every_mvp_market_names_the_grid_it_comes_from():
+    """`grid` replaced the old free-text `derived_from`: it is the unit the
+    diversity caps work on, so it has to be a real grid name."""
     from nway.config import load_config
 
-    config = load_config()
-    for market in config.markets:
-        assert market.derived_from or market.model or not market.mvp, \
-            f"{market.key} has neither a derivation nor a model"
+    valid = {"GOAL_MATRIX", "HALF_MATRIX", "CORNER_MATRIX", "CARD_DISTRIBUTION"}
+    for market in load_config().markets:
+        if not market.mvp:
+            continue
+        assert market.grid in valid, \
+            f"{market.key} declares an unknown grid {market.grid!r}"
 
 
 def test_enabled_competitions_reference_real_competitions():
@@ -180,3 +184,66 @@ def test_every_declared_family_has_a_diversity_cap():
                 if m.recommendable and m.enabled_competitions}
     uncapped = sorted(families - set(caps))
     assert not uncapped, f"recommendable families with no cap: {uncapped}"
+
+
+def test_every_market_declares_its_grid():
+    """The diversity caps work on the grid, so an unlabelled market would
+    escape them."""
+    from nway.config import load_config
+    from nway.markets.registry import MARKET_GRID
+
+    for market in load_config().markets:
+        if market.key in ("EXPECTED_GOALS", "GOAL_MARGIN", "ANYTIME_SCORER"):
+            continue
+        assert market.grid == MARKET_GRID[market.key], (
+            f"{market.key} claims grid {market.grid} but is derived from "
+            f"{MARKET_GRID[market.key]}")
+
+
+def test_corner_and_card_markets_are_gated_off_for_the_champions_league():
+    """football-data.org supplies full-time and half-time goals only, so there
+    are no corner or card statistics for this competition at any tier."""
+    from nway.config import load_config
+
+    config = load_config()
+    for market in config.markets:
+        if market.grid in ("CORNER_MATRIX", "CARD_DISTRIBUTION"):
+            assert not market.enabled_for("champions_league"), (
+                f"{market.key} is enabled for a competition with no statistics")
+    grids = config.grids_enabled_for("champions_league")
+    assert set(grids) == {"GOAL_MATRIX", "HALF_MATRIX"}
+
+
+def test_goal_and_half_markets_are_enabled_for_every_competition():
+    from nway.config import load_config
+
+    config = load_config()
+    for slug in ("premier_league", "champions_league", "eredivisie"):
+        grids = config.grids_enabled_for(slug)
+        assert "GOAL_MATRIX" in grids and "HALF_MATRIX" in grids
+
+
+def test_market_floors_still_match_the_documented_rule():
+    from nway.config import load_config, market_floor
+
+    config = load_config()
+    absolute = float(config.thresholds["absolute_floor"])
+    lift = float(config.thresholds["lift_k"])
+    for market in config.markets:
+        if market.base_rate is None or market.min_probability is None:
+            continue
+        expected = market_floor(market.base_rate, absolute, lift)
+        assert abs(market.min_probability - expected) < 0.002, (
+            f"{market.key}: configured {market.min_probability}, "
+            f"rule gives {expected:.3f}")
+
+
+def test_base_rates_carry_their_sample_size():
+    """A base rate without an n cannot be judged."""
+    from nway.config import load_config
+
+    for market in load_config().markets:
+        if market.base_rate is None:
+            continue
+        assert market.base_rate_n and market.base_rate_n > 1000, (
+            f"{market.key} base rate rests on {market.base_rate_n} matches")

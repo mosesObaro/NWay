@@ -250,17 +250,98 @@ derived from it carries the `sxg_` prefix.
 
 ---
 
-## 4. Corners and cards [Recommended]
+## 4a. Market coverage: four grids, 86 markets
+
+Each event type has exactly **one** joint grid, and every sub-market is a sum
+over its cells. That is what makes impossible orderings unreachable rather
+than merely unlikely — a team total cannot exceed the match total, a first half
+cannot hold more goals than the match, and `P(Over 2.5) > P(Over 1.5)` cannot
+occur.
+
+| Grid | Markets | Source |
+|---|---|---|
+| `GOAL_MATRIX` | 44 | Dixon–Coles 11×11 full-time grid |
+| `HALF_MATRIX` | 18 | binomial split of the **same** full-time grid |
+| `CORNER_MATRIX` | 21 | 26×26 negative-binomial total × beta-binomial share |
+| `CARD_DISTRIBUTION` | 6 | negative-binomial total cards |
+
+65 of the 86 are recommendable; 21 are derived and evaluated but never
+selected, each with a stated reason in `config/markets.yaml`.
+
+**Settlement stays strictly Bernoulli**, which the Beta posterior ranker
+requires. Asian handicaps use half lines only, so they cannot push — and the
+±0.5 lines are omitted deliberately, because home +0.5 *is* double chance 1X
+and away +0.5 *is* X2, both already registered. Whole-number handicaps are
+expressed as European 3-way markets: three mutually exclusive binary outcomes
+that sum to one, where a two-way whole-number line would push. A property test
+asserts that every 3-way trio resolves to exactly one winner across all
+scorelines from 0-0 to 5-5.
+
+### Half-time: a split, not a second model
+
+Fitting an independent half model would give two grids for one match whose
+full-time marginals disagree, and `P(1H Over 1.5)` could exceed
+`P(FT Over 1.5)`. Instead, condition on the full-time score: if goals arrive as
+a Poisson process, then given a side's final total the number scored before the
+interval is `Binomial(total, share)`.
+
+```
+P(HT = (h1,a1), FT = (h,a)) = P_FT(h,a) · Binom(h1; h, s) · Binom(a1; a, s)
+```
+
+The full-time marginal is then *exactly* the input grid, and the only parameter
+is `s`, the share of goals scored in the first half. Measured across 21,919
+matches: **0.4429** pooled, 0.4359 (Serie A) to 0.4512 (Primeira Liga) — so
+splitting a full-time rate evenly would overstate first-half scoring by ~13%.
+HT/FT comes from the same joint, because a side leading at the interval is far
+likelier to win and multiplying the two marginals would be wrong.
+
+## 4. Corners and cards
 
 Separate models, because corners and cards are not deducible from the goal
 distribution and are driven by different mechanisms (territorial dominance and
 playing style; referee strictness and match tension).
 
-**Corners** — negative binomial GLM per side:
-`log E[corners] = μ_c + home_corner_adv + corner_attack_i + corner_defence_j + β·(shot dominance)`,
-with a fitted dispersion parameter. Totals come from the convolution of the two
-sides' distributions; the small positive dependence between them (both rise in
-open games) is handled with a shared match-level intensity term.
+**Corners** — and here the measurement overturned the original design. Corners
+are **not** two independent counts. Over 21,919 matches, home and away corners
+correlate at **−0.276**: one side having more means the other has fewer, which
+is what possession implies. An independent product gives
+var(home) + var(away) = 16.09 against a measured total variance of **11.68** —
+overstating the spread of total corners by 38%, precisely at the 8.5–11.5 lines
+where the mass sits.
+
+So the grid is built the other way round:
+
+```
+total      T  ~ NegBinomial(mu, r)
+home share H | T ~ BetaBinomial(T, alpha, beta)
+P(c_h, c_a)    = P(T = c_h+c_a) · P(H = c_h | T)
+```
+
+with
+`log mu_home = mu_c + home_adv_c + attack_h + concede_a + beta·supremacy`,
+supremacy being the goal model's expected margin (measured correlation between
+corner difference and goal supremacy: **+0.105**).
+
+Two things fall out for free. The total marginal is exactly the fitted negative
+binomial, so the **total over/under lines are calibrated by construction**
+rather than by luck. And because the split is conditional on the total, the
+negative covariance is induced by the mechanism itself:
+`var(H) + var(A) + 2cov = var(T)` holds identically.
+
+Fitted jointly by maximum likelihood — each match contributes the NB
+probability of its total and the beta-binomial probability of the home share.
+What the fit reproduces:
+
+| | Observed | Model |
+|---|---|---|
+| mean total | 9.867 | 9.760 |
+| var total | 11.678 | 11.745 |
+| var home | 8.949 | 8.835 |
+| var away | 7.138 | 7.140 |
+| **corr(home, away)** | **−0.276** | **−0.266** |
+
+Independence would have given var 17.13 and correlation −0.147.
 
 **Cards** — negative binomial with **mandatory per-competition intercepts**.
 The measured spread makes the reason unmissable:
@@ -281,11 +362,32 @@ available only for the Premier League**, so a referee random effect exists in
 the Premier League card model alone, and the other six leagues carry an
 explicit `referee_unknown` flag rather than an imputed average.
 
+Only **total** cards are modelled. Unlike corners, where per-side counts follow
+from territory, card counts per side depend heavily on game state and referee
+tendency — and on 15.8% referee coverage, splitting them would be guessing with
+a decimal point.
+
+Referee effects are shrunk toward zero in proportion to how little has been
+seen of each official:
+
+```
+effect = (n / (n + 12)) · mean(log(observed / expected))
+```
+
+A referee with four matches barely moves the rate; one with eighty moves it
+most of the way. Where the referee is unknown the effect is exactly zero and a
+`referee_known` flag records that, so a missing referee is visibly missing
+rather than silently average.
+
 **Per-league eligibility gate.** Corners and cards markets are enabled per
 league only where the training sample clears the configured minimum
 (`config/markets.yaml`). Eredivisie and Primeira Liga have statistics only from
-2017/18 — roughly 2,750 matches each against ~9,900 for the Premier League — so
-they enter later, and only if held-out calibration passes.
+2017/18 — roughly 2,750 matches each against ~9,900 for the Premier League.
+
+**Gated off entirely for the Champions League.** football-data.org supplies
+full-time and half-time goals and nothing else at any tier, so there are no
+corner or card statistics for that competition. `grids_enabled_for` returns
+`GOAL_MATRIX` and `HALF_MATRIX` only, and an architecture test asserts it.
 
 ---
 

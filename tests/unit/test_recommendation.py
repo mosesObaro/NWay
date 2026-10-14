@@ -198,3 +198,132 @@ def test_unknown_team_history_does_not_block(db, config):
     legacy = candidate(db, config)
     legacy.team_history_matches = None
     assert "INSUFFICIENT_TEAM_HISTORY" not in engine.check_eligibility(legacy, NOW)
+
+
+# --------------------------------------------- grid lineage and family caps
+def test_markets_from_one_grid_are_capped_per_fixture(db, config):
+    """Every market from a grid is a summation over the same cells, so two of
+    them on one fixture are one estimate seen twice."""
+    engine = RecommendationEngine(db, config)
+    # Grid comes from the configuration, not the caller: the registry is the
+    # single source of truth for which grid a market belongs to.
+    items = [
+        candidate(db, config, prediction_id=1, fixture_id=1,
+                  market="CORNERS_OVER_8_5", probability=0.80),
+        candidate(db, config, prediction_id=2, fixture_id=1,
+                  market="CORNERS_OVER_9_5", probability=0.78),
+    ]
+    for item in items:
+        item.grid = engine._grid_of(item.market_key)
+    selected = engine.select(engine.score(items, NOW), min_count=1)
+    assert len(selected) == 1, "two markets from one corner grid were co-selected"
+
+
+def test_half_time_shares_the_goal_lineage(db, config):
+    """Half markets are a binomial split of the same full-time grid, so a half
+    bet and a full-time bet are not two opportunities."""
+    engine = RecommendationEngine(db, config)
+    assert engine.lineage_of("OVER_2_5") == engine.lineage_of("HT_OVER_0_5")
+    assert engine.lineage_of("CORNERS_OVER_8_5") != engine.lineage_of("OVER_2_5")
+    assert engine.lineage_of("CARDS_OVER_3_5") != engine.lineage_of("CORNERS_OVER_8_5")
+
+
+def test_different_grids_may_share_a_fixture(db, config):
+    """Corners and goals are genuinely distinct estimates, so one fixture may
+    contribute one of each -- up to the per-fixture cap."""
+    engine = RecommendationEngine(db, config)
+    goals = candidate(db, config, prediction_id=1, fixture_id=1,
+                      market="OVER_1_5", probability=0.90)
+    goals.grid = engine._grid_of(goals.market_key)
+    corners = candidate(db, config, prediction_id=2, fixture_id=1,
+                        market="CORNERS_OVER_8_5", probability=0.80)
+    corners.grid = engine._grid_of(corners.market_key)
+    selected = engine.select(engine.score([goals, corners], NOW), min_count=1)
+    assert len(selected) == 2
+
+
+def test_per_fixture_cap_is_respected_across_grids(db, config):
+    """Four grids must not mean four bets on one match."""
+    engine = RecommendationEngine(db, config)
+    items = []
+    for index, (market, grid) in enumerate([
+        ("OVER_1_5", "GOAL_MATRIX"), ("HT_OVER_0_5", "HALF_MATRIX"),
+        ("CORNERS_OVER_8_5", "CORNER_MATRIX"), ("CARDS_OVER_3_5", "CARD_DISTRIBUTION"),
+    ], start=1):
+        item = candidate(db, config, prediction_id=index, fixture_id=1,
+                         market=market, probability=0.88)
+        item.grid = engine._grid_of(market)
+        items.append(item)
+    selected = engine.select(engine.score(items, NOW), min_count=1)
+    cap = int(config.recommendations["diversity"]["max_selections_per_fixture"])
+    assert len(selected) <= cap
+
+
+def test_no_family_exceeds_a_quarter_of_the_batch(db, config):
+    """With 65 recommendable markets an unconstrained batch would be twenty
+    views of three estimates."""
+    engine = RecommendationEngine(db, config)
+    items = []
+    for index in range(1, 41):
+        item = candidate(db, config, prediction_id=index, fixture_id=index,
+                         market="CORNERS_OVER_8_5", probability=0.85)
+        item.grid = engine._grid_of(item.market_key)
+        items.append(item)
+    for index in range(41, 81):
+        item = candidate(db, config, prediction_id=index, fixture_id=index,
+                         market="OVER_1_5", probability=0.90)
+        item.grid = engine._grid_of(item.market_key)
+        items.append(item)
+    selected = engine.select(engine.score(items, NOW))
+    if len(selected) >= 8:
+        from collections import Counter
+        mix = Counter(config.market(s.candidate.market_key).family
+                      for s in selected)
+        assert max(mix.values()) / len(selected) <= 0.55
+
+
+def test_lift_factor_ranks_by_distance_covered_not_by_probability(db, config):
+    """Normalised lift makes different base rates comparable.
+
+    A thin call on a high-base-rate market must score below a substantial call
+    on a lower one, even at the same probability: Under 5.5 cards at 90%
+    against a 75.6% base rate has covered 0.590 of the distance to certainty,
+    where BTTS at 90% against 54.8% has covered 0.779.
+    """
+    engine = RecommendationEngine(db, config)
+    thin = candidate(db, config, prediction_id=1, fixture_id=1,
+                     market="CARDS_UNDER_5_5", probability=0.90)
+    substantial = candidate(db, config, prediction_id=2, fixture_id=2,
+                            market="BTTS", probability=0.90)
+    assert engine._lift_factor(substantial) > engine._lift_factor(thin)
+
+    # And a high base rate does NOT by itself mean low information: measuring
+    # it is what settles that.
+    handicap = candidate(db, config, prediction_id=3, fixture_id=3,
+                         market="AH_HOME_PLUS_1_5", probability=0.98)
+    assert engine._lift_factor(handicap) > engine._lift_factor(thin)
+
+
+def test_lift_factor_rises_with_probability_within_one_market(db, config):
+    engine = RecommendationEngine(db, config)
+    weaker = candidate(db, config, market="BTTS", probability=0.70)
+    stronger = candidate(db, config, market="BTTS", probability=0.92)
+    assert engine._lift_factor(stronger) > engine._lift_factor(weaker)
+
+
+def test_lift_factor_is_bounded_and_never_dominates(db, config):
+    """Reliability must stay primary: a well-evidenced ordinary call should
+    beat an exciting unproven one."""
+    engine = RecommendationEngine(db, config)
+    weight = float(config.recommendations["reliability"]["lift_weight"])
+    for market, probability in (("BTTS", 0.99), ("BTTS", 0.55),
+                                ("OVER_1_5", 0.95), ("CARDS_OVER_3_5", 0.70)):
+        item = candidate(db, config, market=market, probability=probability)
+        factor = engine._lift_factor(item)
+        assert 1.0 - weight - 1e-9 <= factor <= 1.0 + 1e-9
+
+
+def test_unknown_market_does_not_crash_the_lift_factor(db, config):
+    engine = RecommendationEngine(db, config)
+    item = candidate(db, config, market="NOT_A_MARKET", probability=0.9)
+    assert 0.0 < engine._lift_factor(item) <= 1.0

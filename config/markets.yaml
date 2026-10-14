@@ -1,221 +1,918 @@
-# Market registry.
+# Market registry. GENERATED -- see research/generate_markets.py.
 #
-# `base_rate` values are MEASURED over 21,545 matches, seven leagues,
-# 2017/18-2025/26 (research/feasibility_study.py). `min_probability` is NOT
-# hand-picked: it is computed by the rule below and pinned here so that the
-# effective value is visible in configuration rather than hidden in code.
+# `base_rate` is MEASURED by settling each market through
+# nway.validation.resolvers over the last three seasons (5,523 matches;
+# 5,102 for corners and cards, which need statistics). Base rates and
+# settlement therefore cannot disagree: they share one definition.
 #
+# The last three seasons rather than all nine because the regime moves: total
+# cards have fallen from 4.54 a match in 2019/20 to 3.68 so far in 2026/27, and
+# a nine-season average would set the card floors too high.
+#
+# `min_probability` is not hand-picked:
 #     floor = max(absolute_floor, base_rate + lift_k * (1 - base_rate))
-#     absolute_floor = 0.65      lift_k = 0.25
-#
-# Both terms are needed. The relative term makes the floor mean the same thing
-# across markets -- the model must be a quarter of the way from the market's own
-# base rate to certainty. The absolute term stops a low-base-rate market (an
-# away win at 49%) from qualifying as "high confidence" just by beating its own
-# base rate. Derivation and the supply sweep: research/threshold_study.py.
+# The relative term makes the floor mean the same thing in every market -- the
+# model must be a quarter of the way from the market's own base rate to
+# certainty. The absolute term stops a low-base-rate market counting as high
+# confidence merely by beating its base rate.
 
 thresholds:
   absolute_floor: 0.65
   lift_k: 0.25
 
 markets:
-  # ---- MVP: derived from the goal matrix -------------------------------
+
+  # ---- GOAL_MATRIX ---------------------------------------------------
+  # Derived from the Dixon-Coles full-time goal grid.
+
+  - key: BTTS
+    family: BTTS
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.5475
+    base_rate_n: 5523
+    min_probability: 0.661
+    enabled_competitions: [ALL]
+
+  - key: BTTS_NO
+    family: BTTS
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.4525
+    base_rate_n: 5523
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: HOME_CLEAN_SHEET
+    family: CLEAN_SHEET
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.2868
+    base_rate_n: 5523
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: HOME_WIN_TO_NIL
+    family: CLEAN_SHEET
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.2292
+    base_rate_n: 5523
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: AWAY_CLEAN_SHEET
+    family: CLEAN_SHEET
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.2232
+    base_rate_n: 5523
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: AWAY_WIN_TO_NIL
+    family: CLEAN_SHEET
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.1657
+    base_rate_n: 5523
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      base rate 0.166 against an absolute floor of 0.65 demands a lift o
+      f 0.48, which no derived market reaches
+
+  - key: HOME_AND_OVER_2_5
+    family: COMBO
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.2785
+    base_rate_n: 5523
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: HOME_AND_BTTS
+    family: COMBO
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.2062
+    base_rate_n: 5523
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: AWAY_AND_OVER_2_5
+    family: COMBO
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.1946
+    base_rate_n: 5523
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      base rate 0.195 against an absolute floor of 0.65 demands a lift o
+      f 0.46, which no derived market reaches
+
+  - key: DRAW_AND_BTTS
+    family: COMBO
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.1905
+    base_rate_n: 5523
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      base rate 0.191 against an absolute floor of 0.65 demands a lift o
+      f 0.46, which no derived market reaches
+
+  - key: AWAY_AND_BTTS
+    family: COMBO
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.1508
+    base_rate_n: 5523
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      base rate 0.151 against an absolute floor of 0.65 demands a lift o
+      f 0.50, which no derived market reaches
+
+  - key: DRAW_AND_OVER_2_5
+    family: COMBO
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.0779
+    base_rate_n: 5523
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      base rate 0.078 against an absolute floor of 0.65 demands a lift o
+      f 0.57, which no derived market reaches
+
+  - key: DOUBLE_CHANCE_12
+    family: DOUBLE_CHANCE
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.7519
+    base_rate_n: 5523
+    min_probability: 0.814
+    enabled_competitions: [ALL]
+
+  - key: DOUBLE_CHANCE_1X
+    family: DOUBLE_CHANCE
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.6835
+    base_rate_n: 5523
+    min_probability: 0.763
+    enabled_competitions: [ALL]
+
+  - key: DOUBLE_CHANCE_X2
+    family: DOUBLE_CHANCE
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.5645
+    base_rate_n: 5523
+    min_probability: 0.673
+    enabled_competitions: [ALL]
+
+  - key: AH_HOME_PLUS_1_5
+    family: HANDICAP
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.8532
+    base_rate_n: 5523
+    min_probability: 0.89
+    enabled_competitions: [ALL]
+
+  - key: AH_AWAY_PLUS_1_5
+    family: HANDICAP
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.7717
+    base_rate_n: 5523
+    min_probability: 0.829
+    enabled_competitions: [ALL]
+
+  - key: EH_PLUS_1_HOME
+    family: HANDICAP
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.6835
+    base_rate_n: 5523
+    min_probability: 0.763
+    enabled_competitions: [ALL]
+
+  - key: EH_MINUS_1_AWAY
+    family: HANDICAP
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.5645
+    base_rate_n: 5523
+    min_probability: 0.673
+    enabled_competitions: [ALL]
+
+  - key: AH_HOME_MINUS_1_5
+    family: HANDICAP
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.2283
+    base_rate_n: 5523
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: EH_MINUS_1_HOME
+    family: HANDICAP
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.2283
+    base_rate_n: 5523
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: EH_MINUS_1_DRAW
+    family: HANDICAP
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.2071
+    base_rate_n: 5523
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: EH_PLUS_1_DRAW
+    family: HANDICAP
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.1697
+    base_rate_n: 5523
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      base rate 0.170 against an absolute floor of 0.65 demands a lift o
+      f 0.48, which no derived market reaches
+
+  - key: AH_AWAY_MINUS_1_5
+    family: HANDICAP
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.1468
+    base_rate_n: 5523
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      base rate 0.147 against an absolute floor of 0.65 demands a lift o
+      f 0.50, which no derived market reaches
+
+  - key: EH_PLUS_1_AWAY
+    family: HANDICAP
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.1468
+    base_rate_n: 5523
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      base rate 0.147 against an absolute floor of 0.65 demands a lift o
+      f 0.50, which no derived market reaches
+
   - key: HOME_WIN
     family: RESULT
-    derived_from: GOAL_MATRIX
+    grid: GOAL_MATRIX
     mvp: true
-    base_rate: 0.438
-    min_probability: 0.650        # absolute floor binds
+    base_rate: 0.4355
+    base_rate_n: 5523
+    min_probability: 0.65
     enabled_competitions: [ALL]
 
   - key: AWAY_WIN
     family: RESULT
-    derived_from: GOAL_MATRIX
+    grid: GOAL_MATRIX
     mvp: true
-    base_rate: 0.313
-    min_probability: 0.650        # absolute floor binds; only ~5% of fixtures clear it
+    base_rate: 0.3165
+    base_rate_n: 5523
+    min_probability: 0.65
     enabled_competitions: [ALL]
 
   - key: DRAW
     family: RESULT
-    derived_from: GOAL_MATRIX
+    grid: GOAL_MATRIX
     mvp: true
-    base_rate: 0.248
-    min_probability: 0.650
+    base_rate: 0.2481
+    base_rate_n: 5523
+    min_probability: 0.65
     recommendable: false
     disabled_reason: >-
-      Draw probability rarely exceeds ~33% for any model, so this market can
-      never clear the floor. Predicted and evaluated for completeness; never
-      recommended.
-
-  - key: DOUBLE_CHANCE_1X
-    family: DOUBLE_CHANCE
-    derived_from: GOAL_MATRIX
-    mvp: true
-    base_rate: 0.687
-    min_probability: 0.765        # relative term binds
-    enabled_competitions: [ALL]
-    correlated_with: [HOME_WIN, DRAW]
-
-  - key: DOUBLE_CHANCE_X2
-    family: DOUBLE_CHANCE
-    derived_from: GOAL_MATRIX
-    mvp: true
-    base_rate: 0.562
-    min_probability: 0.671
-    enabled_competitions: [ALL]
-    correlated_with: [AWAY_WIN, DRAW]
-
-  - key: OVER_1_5
-    family: TOTALS
-    derived_from: GOAL_MATRIX
-    mvp: true
-    base_rate: 0.771
-    min_probability: 0.828        # a 72% "high confidence" call here would be
-                                  # WEAKER than assuming the league average
-    enabled_competitions: [ALL]
-    correlated_with: [OVER_2_5, OVER_3_5, BTTS]
-
-  - key: OVER_2_5
-    family: TOTALS
-    derived_from: GOAL_MATRIX
-    mvp: true
-    base_rate: 0.533
-    min_probability: 0.650
-    enabled_competitions: [ALL]
-    correlated_with: [OVER_1_5, OVER_3_5, BTTS]
-
-  - key: UNDER_2_5
-    family: TOTALS
-    derived_from: GOAL_MATRIX
-    mvp: true
-    base_rate: 0.467
-    min_probability: 0.650
-    enabled_competitions: [ALL]
-
-  - key: BTTS
-    family: BTTS
-    derived_from: GOAL_MATRIX
-    mvp: true
-    base_rate: 0.535
-    min_probability: 0.651
-    enabled_competitions: [ALL]
-
-  # These six were produced by the prediction pipeline but never declared
-  # here, so every one was rejected as UNKNOWN_MARKET -- 282 of 705 candidates
-  # on 2026-10-10. Base rates are the actual rates measured in the 2024/25
-  # walk-forward backtest (n=2364 each).
-  - key: OVER_0_5
-    family: TOTALS
-    derived_from: GOAL_MATRIX
-    mvp: true
-    base_rate: 0.944
-    min_probability: 0.958
-    recommendable: false
-    disabled_reason: >-
-      Technically well calibrated but almost information-free: "at least one
-      goal" comes in 94.4% of the time, so even a 97.7% call is a three-point
-      lift. Predicted and evaluated; never recommended.
-
-  - key: OVER_3_5
-    family: TOTALS
-    derived_from: GOAL_MATRIX
-    mvp: true
-    base_rate: 0.313
-    min_probability: 0.650
-    enabled_competitions: [ALL]
-    correlated_with: [OVER_1_5, OVER_2_5, BTTS]
+      draw probability rarely exceeds ~33% for any model, so this can ne
+      ver clear its floor
 
   - key: HOME_TO_SCORE
     family: TEAM_GOALS
-    derived_from: GOAL_MATRIX
+    grid: GOAL_MATRIX
     mvp: true
-    base_rate: 0.772
-    min_probability: 0.829
+    base_rate: 0.7768
+    base_rate_n: 5523
+    min_probability: 0.833
     enabled_competitions: [ALL]
-    correlated_with: [BTTS, OVER_1_5]
 
   - key: AWAY_TO_SCORE
     family: TEAM_GOALS
-    derived_from: GOAL_MATRIX
+    grid: GOAL_MATRIX
     mvp: true
-    base_rate: 0.717
-    min_probability: 0.788
+    base_rate: 0.7132
+    base_rate_n: 5523
+    min_probability: 0.785
     enabled_competitions: [ALL]
-    correlated_with: [BTTS, OVER_1_5]
 
-  - key: HOME_CLEAN_SHEET
-    family: CLEAN_SHEET
-    derived_from: GOAL_MATRIX
+  - key: HOME_OVER_1_5
+    family: TEAM_GOALS
+    grid: GOAL_MATRIX
     mvp: true
-    base_rate: 0.283
-    min_probability: 0.650
+    base_rate: 0.4592
+    base_rate_n: 5523
+    min_probability: 0.65
     enabled_competitions: [ALL]
-    correlated_with: [AWAY_TO_SCORE, BTTS]
 
-  - key: AWAY_CLEAN_SHEET
-    family: CLEAN_SHEET
-    derived_from: GOAL_MATRIX
+  - key: AWAY_OVER_1_5
+    family: TEAM_GOALS
+    grid: GOAL_MATRIX
     mvp: true
-    base_rate: 0.228
-    min_probability: 0.650
+    base_rate: 0.373
+    base_rate_n: 5523
+    min_probability: 0.65
     enabled_competitions: [ALL]
-    correlated_with: [HOME_TO_SCORE, BTTS]
 
-  - key: EXPECTED_GOALS
-    family: GOALS_NUMERIC
-    derived_from: GOAL_MATRIX
+  - key: HOME_OVER_2_5
+    family: TEAM_GOALS
+    grid: GOAL_MATRIX
     mvp: true
-    recommendable: false          # reported as supporting context, never selected
+    base_rate: 0.2153
+    base_rate_n: 5523
+    min_probability: 0.65
+    enabled_competitions: [ALL]
 
-  - key: GOAL_MARGIN
-    family: GOALS_NUMERIC
-    derived_from: GOAL_MATRIX
+  - key: AWAY_OVER_2_5
+    family: TEAM_GOALS
+    grid: GOAL_MATRIX
     mvp: true
+    base_rate: 0.143
+    base_rate_n: 5523
+    min_probability: 0.65
     recommendable: false
+    disabled_reason: >-
+      base rate 0.143 against an absolute floor of 0.65 demands a lift o
+      f 0.51, which no derived market reaches
 
-  # ---- Phase 11: half-time (half-time data is 100% complete) -----------
+  - key: OVER_0_5
+    family: TOTALS
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.9424
+    base_rate_n: 5523
+    min_probability: 0.957
+    recommendable: false
+    disabled_reason: >-
+      base rate 0.942 leaves almost no information: the floor of 0.957 i
+      s a lift of 0.015, inside the noise
+
+  - key: OVER_1_5
+    family: TOTALS
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.7816
+    base_rate_n: 5523
+    min_probability: 0.836
+    enabled_competitions: [ALL]
+
+  - key: UNDER_3_5
+    family: TOTALS
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.6714
+    base_rate_n: 5523
+    min_probability: 0.754
+    enabled_competitions: [ALL]
+
+  - key: OVER_2_5
+    family: TOTALS
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.551
+    base_rate_n: 5523
+    min_probability: 0.663
+    enabled_competitions: [ALL]
+
+  - key: UNDER_2_5
+    family: TOTALS
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.449
+    base_rate_n: 5523
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: OVER_3_5
+    family: TOTALS
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.3286
+    base_rate_n: 5523
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: UNDER_1_5
+    family: TOTALS
+    grid: GOAL_MATRIX
+    mvp: true
+    base_rate: 0.2184
+    base_rate_n: 5523
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  # ---- HALF_MATRIX ---------------------------------------------------
+  # Derived from the full-time grid by a binomial split, so the full-time marginal is preserved exactly and a half market cannot exceed its full-time counterpart.
+
+  - key: HT_DOUBLE_CHANCE_1X
+    family: HALVES
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.7418
+    base_rate_n: 5522
+    min_probability: 0.806
+    enabled_competitions: [ALL]
+
   - key: HT_OVER_0_5
     family: HALVES
-    derived_from: HALF_MATRIX
-    mvp: false
-    base_rate: 0.712
-    min_probability: 0.784
-    enabled_competitions: []      # enable per league after Phase 11 validation
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.7226
+    base_rate_n: 5522
+    min_probability: 0.792
+    enabled_competitions: [ALL]
 
-  # ---- Phase 10: corners (negative binomial, var/mean 1.18 measured) ---
+  - key: HT_DOUBLE_CHANCE_X2
+    family: HALVES
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.6509
+    base_rate_n: 5522
+    min_probability: 0.738
+    enabled_competitions: [ALL]
+
+  - key: HT_UNDER_1_5
+    family: HALVES
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.6396
+    base_rate_n: 5522
+    min_probability: 0.73
+    enabled_competitions: [ALL]
+
+  - key: HT_DRAW
+    family: HALVES
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.3926
+    base_rate_n: 5522
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: HT_OVER_1_5
+    family: HALVES
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.3604
+    base_rate_n: 5522
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: HT_HOME_WIN
+    family: HALVES
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.3491
+    base_rate_n: 5522
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: HT_UNDER_0_5
+    family: HALVES
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.2774
+    base_rate_n: 5522
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: HT_AWAY_WIN
+    family: HALVES
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.2582
+    base_rate_n: 5522
+    min_probability: 0.65
+    enabled_competitions: [ALL]
+
+  - key: HTFT_H_H
+    family: HTFT
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.2706
+    base_rate_n: 5522
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      nine mutually exclusive outcomes, none with a base rate near the f
+      loor; derived and evaluated, never recommended
+
+  - key: HTFT_A_A
+    family: HTFT
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.1771
+    base_rate_n: 5522
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      nine mutually exclusive outcomes, none with a base rate near the f
+      loor; derived and evaluated, never recommended
+
+  - key: HTFT_D_D
+    family: HTFT
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.14
+    base_rate_n: 5522
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      nine mutually exclusive outcomes, none with a base rate near the f
+      loor; derived and evaluated, never recommended
+
+  - key: HTFT_D_H
+    family: HTFT
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.138
+    base_rate_n: 5522
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      nine mutually exclusive outcomes, none with a base rate near the f
+      loor; derived and evaluated, never recommended
+
+  - key: HTFT_D_A
+    family: HTFT
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.1146
+    base_rate_n: 5522
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      nine mutually exclusive outcomes, none with a base rate near the f
+      loor; derived and evaluated, never recommended
+
+  - key: HTFT_A_D
+    family: HTFT
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.0541
+    base_rate_n: 5522
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      nine mutually exclusive outcomes, none with a base rate near the f
+      loor; derived and evaluated, never recommended
+
+  - key: HTFT_H_D
+    family: HTFT
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.054
+    base_rate_n: 5522
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      nine mutually exclusive outcomes, none with a base rate near the f
+      loor; derived and evaluated, never recommended
+
+  - key: HTFT_A_H
+    family: HTFT
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.027
+    base_rate_n: 5522
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      nine mutually exclusive outcomes, none with a base rate near the f
+      loor; derived and evaluated, never recommended
+
+  - key: HTFT_H_A
+    family: HTFT
+    grid: HALF_MATRIX
+    mvp: true
+    base_rate: 0.0246
+    base_rate_n: 5522
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      nine mutually exclusive outcomes, none with a base rate near the f
+      loor; derived and evaluated, never recommended
+
+  # ---- CORNER_MATRIX -------------------------------------------------
+  # Derived from the 26x26 corner grid: negative-binomial total with a beta-binomial home share.
+
+  - key: CORNERS_AH_HOME_PLUS_1_5
+    family: CORNERS_RESULT
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.717
+    base_rate_n: 5102
+    min_probability: 0.788
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: CORNERS_AH_AWAY_PLUS_1_5
+    family: CORNERS_RESULT
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.56
+    base_rate_n: 5102
+    min_probability: 0.67
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: CORNERS_1X2_HOME
+    family: CORNERS_RESULT
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.5367
+    base_rate_n: 5102
+    min_probability: 0.653
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: CORNERS_AH_HOME_MINUS_1_5
+    family: CORNERS_RESULT
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.44
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: CORNERS_1X2_AWAY
+    family: CORNERS_RESULT
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.3671
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: CORNERS_AH_AWAY_MINUS_1_5
+    family: CORNERS_RESULT
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.283
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: CORNERS_1X2_DRAW
+    family: CORNERS_RESULT
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.0962
+    base_rate_n: 5102
+    min_probability: 0.65
+    recommendable: false
+    disabled_reason: >-
+      base rate 0.096 against an absolute floor of 0.65 demands a lift o
+      f 0.55, which no derived market reaches
+
+  - key: HOME_CORNERS_OVER_3_5
+    family: CORNERS_TEAM
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.7001
+    base_rate_n: 5102
+    min_probability: 0.775
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: AWAY_CORNERS_OVER_3_5
+    family: CORNERS_TEAM
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.5757
+    base_rate_n: 5102
+    min_probability: 0.682
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: HOME_CORNERS_OVER_4_5
+    family: CORNERS_TEAM
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.5547
+    base_rate_n: 5102
+    min_probability: 0.666
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: HOME_CORNERS_OVER_5_5
+    family: CORNERS_TEAM
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.4212
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: AWAY_CORNERS_OVER_4_5
+    family: CORNERS_TEAM
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.42
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: AWAY_CORNERS_OVER_5_5
+    family: CORNERS_TEAM
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.2893
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: CORNERS_UNDER_11_5
+    family: CORNERS_TOTAL
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.7215
+    base_rate_n: 5102
+    min_probability: 0.791
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: CORNERS_UNDER_10_5
+    family: CORNERS_TOTAL
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.6168
+    base_rate_n: 5102
+    min_probability: 0.713
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
   - key: CORNERS_OVER_8_5
-    family: CORNERS
-    model: corners_nb
-    mvp: false
-    base_rate: 0.612
-    min_probability: 0.709
-    enabled_competitions: []      # gated on min_training_matches below
+    family: CORNERS_TOTAL
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.6072
+    base_rate_n: 5102
+    min_probability: 0.705
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: CORNERS_UNDER_9_5
+    family: CORNERS_TOTAL
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.5063
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
     requires_stats: [corners]
 
   - key: CORNERS_OVER_9_5
-    family: CORNERS
-    model: corners_nb
-    mvp: false
-    base_rate: 0.497
-    min_probability: 0.650
-    enabled_competitions: []
+    family: CORNERS_TOTAL
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.4937
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
     requires_stats: [corners]
 
-  # ---- Phase 10: cards (var/mean 1.34 measured) -------------------------
+  - key: CORNERS_UNDER_8_5
+    family: CORNERS_TOTAL
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.3928
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: CORNERS_OVER_10_5
+    family: CORNERS_TOTAL
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.3832
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  - key: CORNERS_OVER_11_5
+    family: CORNERS_TOTAL
+    grid: CORNER_MATRIX
+    mvp: true
+    base_rate: 0.2785
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [corners]
+
+  # ---- CARD_DISTRIBUTION ---------------------------------------------
+  # Derived from the negative-binomial total-card distribution.
+
+  - key: CARDS_UNDER_5_5
+    family: CARDS
+    grid: CARD_DISTRIBUTION
+    mvp: true
+    base_rate: 0.7564
+    base_rate_n: 5102
+    min_probability: 0.817
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [yellow_cards, red_cards]
+
+  - key: CARDS_UNDER_4_5
+    family: CARDS
+    grid: CARD_DISTRIBUTION
+    mvp: true
+    base_rate: 0.6053
+    base_rate_n: 5102
+    min_probability: 0.704
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [yellow_cards, red_cards]
+
   - key: CARDS_OVER_3_5
     family: CARDS
-    model: cards_nb
-    mvp: false
-    min_probability: 0.650
-    enabled_competitions: []
+    grid: CARD_DISTRIBUTION
+    mvp: true
+    base_rate: 0.5741
+    base_rate_n: 5102
+    min_probability: 0.681
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
     requires_stats: [yellow_cards, red_cards]
-    notes: >-
-      Measured league means span 3.18 (Eredivisie) to 5.39 (Primeira Liga), so
-      per-competition intercepts are mandatory and a pooled base_rate would be
-      meaningless. Referee identity is available for the Premier League only.
 
-  # ---- Blocked on data, not effort -------------------------------------
+  - key: CARDS_UNDER_3_5
+    family: CARDS
+    grid: CARD_DISTRIBUTION
+    mvp: true
+    base_rate: 0.4259
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [yellow_cards, red_cards]
+
+  - key: CARDS_OVER_4_5
+    family: CARDS
+    grid: CARD_DISTRIBUTION
+    mvp: true
+    base_rate: 0.3947
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [yellow_cards, red_cards]
+
+  - key: CARDS_OVER_5_5
+    family: CARDS
+    grid: CARD_DISTRIBUTION
+    mvp: true
+    base_rate: 0.2436
+    base_rate_n: 5102
+    min_probability: 0.65
+    enabled_competitions: [premier_league, la_liga, bundesliga, serie_a, ligue_1, eredivisie, primeira_liga]
+    requires_stats: [yellow_cards, red_cards]
+
+  # ---- numeric, reported as context and never selected -------------------
+
+  - key: EXPECTED_GOALS
+    family: GOALS_NUMERIC
+    grid: GOAL_MATRIX
+    mvp: true
+    recommendable: false
+
+  - key: GOAL_MARGIN
+    family: GOALS_NUMERIC
+    grid: GOAL_MATRIX
+    mvp: true
+    recommendable: false
+
+  # ---- blocked on data, not effort ---------------------------------------
+
   - key: ANYTIME_SCORER
     family: PLAYER
     mvp: false
@@ -225,13 +922,13 @@ markets:
       injuries. See docs/DATA_SOURCES.md section 9.
 
 # A market is enabled for a competition only when its training sample clears
-# this floor. This is why Eredivisie and Primeira Liga corners (~2,750 matches
-# of history, stats only from 2017/18) enter later than England's (~9,900).
+# this floor. Eredivisie and Primeira Liga carry corner and card statistics
+# only from 2017/18 (~2,750 matches each) against ~9,900 for England.
 eligibility:
   min_training_matches:
     GOAL_MATRIX: 1500
-    HALVES: 1500
-    CORNERS: 2000
-    CARDS: 2000
-  min_settled_predictions: 500     # before a market may be recommended at all
+    HALF_MATRIX: 1500
+    CORNER_MATRIX: 2000
+    CARD_DISTRIBUTION: 2000
+  min_settled_predictions: 500
   max_holdout_ece: 0.05
