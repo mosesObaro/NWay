@@ -137,6 +137,14 @@
   "recent_batches": [
     {
       "actual_send_time": null,
+      "batch_id": 11,
+      "created_at": "2026-10-14T16:50:35Z",
+      "recommendation_count": 9,
+      "skip_reason": "WAITING_FOR_SEND_WINDOW",
+      "status": "SKIPPED"
+    },
+    {
+      "actual_send_time": null,
       "batch_id": 10,
       "created_at": "2026-10-13T22:02:50Z",
       "recommendation_count": 4,
@@ -218,12 +226,12 @@
   ],
   "schedule": {
     "code": "SEND_WINDOW_APPROACHING",
-    "fixtures_in_window": 14,
-    "next_kickoff": "2026-10-14T16:45:00Z",
-    "next_run_at": "2026-10-14T15:55:00Z",
-    "reason": "14 fixtures in the next 72h; send window opens 2026-10-14T16:15:00Z",
-    "sleep_hours": 17.869
+    "fixtures_in_window": 30,
+    "next_kickoff": "2026-10-14T19:00:00Z",
+    "next_run_at": "2026-10-14T18:10:00Z",
+    "reason": "30 fixtures in the next 72h; send window opens 2026-10-14T18:30:00Z",
+    "sleep_hours": 1.323
   },
-  "updated_at": "2026-10-13T22:02:50Z",
+  "updated_at": "2026-10-14T16:50:35Z",
   "version": 1
 }
