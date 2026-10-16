@@ -1,6 +1,146 @@
 {
   "notified": [
     {
+      "fixture_id": 22543,
+      "market_key": "AH_HOME_PLUS_1_5",
+      "probability_sent": 0.99,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22543,
+      "market_key": "CORNERS_AH_HOME_PLUS_1_5",
+      "probability_sent": 0.95413,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22544,
+      "market_key": "OVER_1_5",
+      "probability_sent": 0.843781,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22549,
+      "market_key": "AH_AWAY_PLUS_1_5",
+      "probability_sent": 0.965616,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22591,
+      "market_key": "CORNERS_AH_HOME_PLUS_1_5",
+      "probability_sent": 0.890259,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22593,
+      "market_key": "HOME_TO_SCORE",
+      "probability_sent": 0.858399,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22594,
+      "market_key": "OVER_1_5",
+      "probability_sent": 0.855134,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22599,
+      "market_key": "AH_HOME_PLUS_1_5",
+      "probability_sent": 0.970473,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22599,
+      "market_key": "CORNERS_AH_HOME_PLUS_1_5",
+      "probability_sent": 0.878571,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22641,
+      "market_key": "HOME_TO_SCORE",
+      "probability_sent": 0.906384,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22647,
+      "market_key": "AH_HOME_PLUS_1_5",
+      "probability_sent": 0.958819,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22648,
+      "market_key": "HOME_TO_SCORE",
+      "probability_sent": 0.89826,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22649,
+      "market_key": "HOME_TO_SCORE",
+      "probability_sent": 0.860304,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22688,
+      "market_key": "HT_DOUBLE_CHANCE_X2",
+      "probability_sent": 0.903846,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22690,
+      "market_key": "AH_HOME_PLUS_1_5",
+      "probability_sent": 0.962146,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22749,
+      "market_key": "HOME_TO_SCORE",
+      "probability_sent": 0.899844,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22750,
+      "market_key": "HT_DOUBLE_CHANCE_X2",
+      "probability_sent": 0.903846,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22751,
+      "market_key": "OVER_1_5",
+      "probability_sent": 0.873973,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22752,
+      "market_key": "OVER_1_5",
+      "probability_sent": 0.853269,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
+      "fixture_id": 22792,
+      "market_key": "OVER_1_5",
+      "probability_sent": 0.876268,
+      "selection": "YES",
+      "sent_at": "2026-10-16T18:06:35Z"
+    },
+    {
       "fixture_id": 22531,
       "market_key": "HOME_TO_SCORE",
       "probability_sent": 0.933988,
@@ -136,6 +276,14 @@
   ],
   "recent_batches": [
     {
+      "actual_send_time": "2026-10-16T18:06:35Z",
+      "batch_id": 14,
+      "created_at": "2026-10-16T18:06:35Z",
+      "recommendation_count": 20,
+      "skip_reason": null,
+      "status": "SENT"
+    },
+    {
       "actual_send_time": null,
       "batch_id": 13,
       "created_at": "2026-10-15T21:16:28Z",
@@ -241,13 +389,13 @@
     }
   ],
   "schedule": {
-    "code": "SEND_WINDOW_APPROACHING",
+    "code": "IN_SEND_WINDOW",
     "fixtures_in_window": 53,
-    "next_kickoff": "2026-10-16T18:00:00Z",
-    "next_run_at": "2026-10-16T17:10:00Z",
-    "reason": "53 fixtures in the next 72h; send window opens 2026-10-16T17:30:00Z",
-    "sleep_hours": 19.892
+    "next_kickoff": "2026-10-16T18:30:00Z",
+    "next_run_at": "2026-10-16T18:36:35Z",
+    "reason": "53 fixtures in window; inside the send window now",
+    "sleep_hours": 0.5
   },
-  "updated_at": "2026-10-15T21:16:29Z",
+  "updated_at": "2026-10-16T18:06:35Z",
   "version": 1
 }
