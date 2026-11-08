@@ -1886,13 +1886,13 @@
     }
   ],
   "schedule": {
-    "code": "BELOW_MINIMUM",
-    "fixtures_in_window": 5,
-    "next_kickoff": "2026-11-08T19:45:00Z",
-    "next_run_at": "2026-11-08T20:34:27Z",
-    "reason": "only 5 fixtures in the next 72h, minimum is 7; more may enter the window",
-    "sleep_hours": 1.0
+    "code": "WAITING_FOR_FIXTURES",
+    "fixtures_in_window": 0,
+    "next_kickoff": "2026-11-20T19:30:00Z",
+    "next_run_at": "2026-11-09T23:16:09Z",
+    "reason": "no fixtures within 72h; next kickoff 2026-11-20 (12 days away), enters the window 2026-11-17T19:30:00Z",
+    "sleep_hours": 24.0
   },
-  "updated_at": "2026-11-08T19:34:27Z",
+  "updated_at": "2026-11-08T23:16:09Z",
   "version": 1
 }
