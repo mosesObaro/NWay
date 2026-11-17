@@ -1889,10 +1889,10 @@
     "code": "WAITING_FOR_FIXTURES",
     "fixtures_in_window": 0,
     "next_kickoff": "2026-11-20T19:30:00Z",
-    "next_run_at": "2026-11-17T00:27:49Z",
-    "reason": "no fixtures within 72h; next kickoff 2026-11-20 (4 days away), enters the window 2026-11-17T19:30:00Z",
-    "sleep_hours": 24.0
+    "next_run_at": "2026-11-17T19:30:00Z",
+    "reason": "no fixtures within 72h; next kickoff 2026-11-20 (3 days away), enters the window 2026-11-17T19:30:00Z",
+    "sleep_hours": 18.322
   },
-  "updated_at": "2026-11-16T00:27:49Z",
+  "updated_at": "2026-11-17T01:10:39Z",
   "version": 1
 }
