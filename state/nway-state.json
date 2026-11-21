@@ -1,6 +1,146 @@
 {
   "notified": [
     {
+      "fixture_id": 22882,
+      "market_key": "AH_HOME_PLUS_1_5",
+      "probability_sent": 0.978385,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22885,
+      "market_key": "AH_HOME_PLUS_1_5",
+      "probability_sent": 0.966677,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22885,
+      "market_key": "HOME_CORNERS_OVER_3_5",
+      "probability_sent": 0.902807,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22892,
+      "market_key": "AH_HOME_PLUS_1_5",
+      "probability_sent": 0.97151,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22892,
+      "market_key": "CORNERS_AH_HOME_PLUS_1_5",
+      "probability_sent": 0.894743,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22893,
+      "market_key": "HOME_TO_SCORE",
+      "probability_sent": 0.921777,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22896,
+      "market_key": "AWAY_TO_SCORE",
+      "probability_sent": 0.9027,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22897,
+      "market_key": "HOME_TO_SCORE",
+      "probability_sent": 0.934791,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22900,
+      "market_key": "AH_HOME_PLUS_1_5",
+      "probability_sent": 0.969605,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22902,
+      "market_key": "DOUBLE_CHANCE_1X",
+      "probability_sent": 0.838953,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22903,
+      "market_key": "CARDS_UNDER_5_5",
+      "probability_sent": 0.865774,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22909,
+      "market_key": "AH_HOME_PLUS_1_5",
+      "probability_sent": 0.982922,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22909,
+      "market_key": "CORNERS_AH_HOME_PLUS_1_5",
+      "probability_sent": 0.935723,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22914,
+      "market_key": "HOME_TO_SCORE",
+      "probability_sent": 0.912229,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22915,
+      "market_key": "CORNERS_AH_HOME_PLUS_1_5",
+      "probability_sent": 0.873936,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22915,
+      "market_key": "HOME_TO_SCORE",
+      "probability_sent": 0.952037,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22921,
+      "market_key": "HT_DOUBLE_CHANCE_1X",
+      "probability_sent": 0.874384,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22922,
+      "market_key": "CORNERS_AH_HOME_PLUS_1_5",
+      "probability_sent": 0.872184,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22925,
+      "market_key": "CARDS_UNDER_5_5",
+      "probability_sent": 0.898625,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
+      "fixture_id": 22931,
+      "market_key": "CORNERS_AH_HOME_PLUS_1_5",
+      "probability_sent": 0.870916,
+      "selection": "YES",
+      "sent_at": "2026-11-21T12:28:37Z"
+    },
+    {
       "fixture_id": 22626,
       "market_key": "AH_HOME_PLUS_1_5",
       "probability_sent": 0.901343,
@@ -1725,6 +1865,14 @@
   ],
   "recent_batches": [
     {
+      "actual_send_time": "2026-11-21T12:28:37Z",
+      "batch_id": 65,
+      "created_at": "2026-11-21T12:28:36Z",
+      "recommendation_count": 20,
+      "skip_reason": null,
+      "status": "SENT"
+    },
+    {
       "actual_send_time": null,
       "batch_id": 64,
       "created_at": "2026-11-20T23:10:16Z",
@@ -1875,24 +2023,16 @@
       "recommendation_count": 20,
       "skip_reason": null,
       "status": "SENT"
-    },
-    {
-      "actual_send_time": null,
-      "batch_id": 45,
-      "created_at": "2026-10-31T23:01:29Z",
-      "recommendation_count": 118,
-      "skip_reason": "COOLDOWN_ACTIVE",
-      "status": "SKIPPED"
     }
   ],
   "schedule": {
-    "code": "SEND_WINDOW_APPROACHING",
+    "code": "IN_SEND_WINDOW",
     "fixtures_in_window": 54,
     "next_kickoff": "2026-11-21T12:30:00Z",
-    "next_run_at": "2026-11-21T11:40:00Z",
-    "reason": "54 fixtures in the next 72h; send window opens 2026-11-21T12:00:00Z",
-    "sleep_hours": 12.495
+    "next_run_at": "2026-11-21T12:58:37Z",
+    "reason": "54 fixtures in window; inside the send window now",
+    "sleep_hours": 0.5
   },
-  "updated_at": "2026-11-20T23:10:17Z",
+  "updated_at": "2026-11-21T12:28:37Z",
   "version": 1
 }
